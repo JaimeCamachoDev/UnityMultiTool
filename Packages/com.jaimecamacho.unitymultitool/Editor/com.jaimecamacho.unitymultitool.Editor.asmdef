@@ -1,0 +1,5 @@
+{
+  "name": "com.jaimecamacho.unitymultitool.Editor",
+  "references": ["com.jaimecamacho.unitymultitool.Runtime"],
+  "includePlatforms": ["Editor"]
+}

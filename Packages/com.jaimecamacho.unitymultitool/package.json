@@ -1,0 +1,13 @@
+{
+  "author": "Jaime Camacho",
+  "displayName": "UnityMultiTool",
+  "keywords": [
+    "unity"
+  ],
+  "license": "MIT",
+  "name": "com.jaimecamacho.unitymultitool",
+  "unity": "6000.0",
+  "unityRelease": "0f1",
+  "version": "1.0.0",
+  "description": "Multi Herramienta"
+}
