@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEditor;
 using UnityEngine;
-using JaimeCamachoDev.Multitool.Modeling;
 using OptiZone;
 using Optizone;
 using VZ_Optizone;
@@ -50,7 +49,7 @@ namespace JaimeCamachoDev.Multitool
 
         private Texture2D selectedCategoryBackground;
 
-        [MenuItem("Tools/JaimeCamachoDev/Multitool/Open Hub")]
+        [MenuItem("JaimeCamachoDev/Multitool/Open Hub")]
         public static void ShowWindow()
         {
             MultitoolHubWindow window = GetWindow<MultitoolHubWindow>("Multitool");
@@ -83,8 +82,7 @@ namespace JaimeCamachoDev.Multitool
 
             categoryTools[Category.Modelado] = new List<string>
             {
-                "Advanced Mesh Combiner",
-                "Pivot mover & aligner",
+                "Merge mesh and create atlas",
                 "Remove not visible vertex",
                 "Hollow shell",
                 "Multi material Finder",
@@ -131,8 +129,7 @@ namespace JaimeCamachoDev.Multitool
         {
             toolDescriptions.Clear();
 
-            toolDescriptions["Advanced Mesh Combiner"] = "Fusiona múltiples MeshRenderers y SkinnedMeshRenderers en un mesh optimizado agrupando materiales, creando colliders opcionales y guardando assets listos para VR.";
-            toolDescriptions["Pivot mover & aligner"] = "Reposiciona el pivote con asas en escena, presets de anclaje y preservación de hijos/colliders para iterar props rápido.";
+            toolDescriptions["Merge mesh and create atlas"] = "Combina mallas en una sola malla y optimiza sus materiales en un atlas (en desarrollo).";
             toolDescriptions["Remove not visible vertex"] = "Limpia vrtices ocultos para reducir el peso de tus modelos (en desarrollo).";
             toolDescriptions["Hollow shell"] = "Genera una versin hueca del mesh para props o elementos ligeros.";
             toolDescriptions["Multi material Finder"] = "Detecta rpidamente los materiales utilizados por una malla.";
@@ -168,8 +165,6 @@ namespace JaimeCamachoDev.Multitool
             toolActivations.Clear();
             toolDeactivations.Clear();
 
-            toolDrawers["Advanced Mesh Combiner"] = MeshCombinerTool.DrawTool;
-            toolDrawers["Pivot mover & aligner"] = PivotAdjusterTool.DrawTool;
             toolDrawers["Convert Asset to Image"] = AssetToImageConverterTool.DrawTool;
             toolDrawers["Split texture into channels"] = ImageChannelSplitterTool.DrawTool;
             toolDrawers["Merge textures into one"] = ImageChannelMergerTool.DrawTool;
@@ -205,9 +200,6 @@ namespace JaimeCamachoDev.Multitool
 
                 RecalculateMeshBoundsTool.DrawTool();
             };
-
-            toolActivations["Pivot mover & aligner"] = PivotAdjusterTool.EnableSceneView;
-            toolDeactivations["Pivot mover & aligner"] = PivotAdjusterTool.DisableSceneView;
 
             toolActivations["Recalculate Mesh Bounds"] = RecalculateMeshBoundsTool.EnableSceneView;
             toolDeactivations["Recalculate Mesh Bounds"] = RecalculateMeshBoundsTool.DisableSceneView;
