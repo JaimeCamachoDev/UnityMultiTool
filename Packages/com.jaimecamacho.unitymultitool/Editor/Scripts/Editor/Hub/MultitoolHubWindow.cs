@@ -7,6 +7,7 @@ using OptiZone;
 using Optizone;
 using VZ_Optizone;
 using VZOptizone;
+using JaimeCamachoDev.Multitool.Modeling;
 
 namespace JaimeCamachoDev.Multitool
 {
@@ -82,6 +83,8 @@ namespace JaimeCamachoDev.Multitool
 
             categoryTools[Category.Modelado] = new List<string>
             {
+                "Advanced mesh combiner",
+                "Pivot mover & aligner",
                 "Merge mesh and create atlas",
                 "Remove not visible vertex",
                 "Hollow shell",
@@ -129,7 +132,9 @@ namespace JaimeCamachoDev.Multitool
         {
             toolDescriptions.Clear();
 
-            toolDescriptions["Merge mesh and create atlas"] = "Combina mallas en una sola malla y optimiza sus materiales en un atlas (en desarrollo).";
+            toolDescriptions["Advanced mesh combiner"] = "Combina múltiples objetos estáticos o skinned en un único mesh optimizado.";
+            toolDescriptions["Pivot mover & aligner"] = "Ajusta el pivote de uno o varios objetos con presets o gizmo interactivo.";
+            toolDescriptions["Merge mesh and create atlas"] = "Convierte una malla multimaterial en un único atlas listo para producción.";
             toolDescriptions["Remove not visible vertex"] = "Limpia vrtices ocultos para reducir el peso de tus modelos (en desarrollo).";
             toolDescriptions["Hollow shell"] = "Genera una versin hueca del mesh para props o elementos ligeros.";
             toolDescriptions["Multi material Finder"] = "Detecta rpidamente los materiales utilizados por una malla.";
@@ -187,6 +192,9 @@ namespace JaimeCamachoDev.Multitool
             toolDrawers["Move UV inside grid"] = UVAdjusterToolOpti.DrawTool;
             toolDrawers["Vertex ID Display"] = VertexIDDisplayerTool.DrawTool;
             toolDrawers["Micro triangle detector"] = MicroTrianglesDetectorTool.DrawTool;
+            toolDrawers["Advanced mesh combiner"] = MeshCombinerTool.DrawTool;
+            toolDrawers["Merge mesh and create atlas"] = MeshAtlasBakerTool.DrawTool;
+            toolDrawers["Pivot mover & aligner"] = PivotAdjusterTool.DrawTool;
             toolDrawers["Recalculate Mesh Bounds"] = () =>
             {
                 if (Selection.activeGameObject != null)
@@ -206,6 +214,8 @@ namespace JaimeCamachoDev.Multitool
 
             toolActivations["Micro triangle detector"] = MicroTrianglesDetectorTool.EnableSceneView;
             toolDeactivations["Micro triangle detector"] = MicroTrianglesDetectorTool.DisableSceneView;
+            toolActivations["Pivot mover & aligner"] = PivotAdjusterTool.EnableSceneView;
+            toolDeactivations["Pivot mover & aligner"] = PivotAdjusterTool.DisableSceneView;
         }
 
         private void InitializeStyles()
