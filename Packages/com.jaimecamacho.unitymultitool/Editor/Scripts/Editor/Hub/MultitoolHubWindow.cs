@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEditor;
 using UnityEngine;
-using JaimeCamachoDev.Multitool.Modeling;
 using OptiZone;
 using Optizone;
 using VZ_Optizone;
@@ -22,26 +21,18 @@ namespace JaimeCamachoDev.Multitool
             Miscelanea
         }
 
-        private class ToolDefinition
-        {
-            public Category Category;
-            public string Name;
-            public string Description;
-            public Action Drawer;
-            public Action Activate;
-            public Action Deactivate;
-            public bool IsNew;
+        private readonly Dictionary<Category, List<string>> categoryTools = new();
+        private readonly Dictionary<string, string> toolDescriptions = new();
+        private readonly Dictionary<string, Action> toolDrawers = new();
+        private readonly Dictionary<string, Action> toolActivations = new();
+        private readonly Dictionary<string, Action> toolDeactivations = new();
 
-            public bool IsImplemented => Drawer != null;
-        }
-
-        private static string pendingToolActivation;
-        private readonly List<ToolDefinition> tools = new();
         private Category currentCategory = Category.Modelado;
         private Vector2 libraryScrollPosition;
         private Vector2 toolScrollPosition;
         private string searchQuery = string.Empty;
-        private ToolDefinition activeTool;
+        private bool toolActive;
+        private string activeTool = string.Empty;
 
         private GUIStyle headerTitleStyle;
         private GUIStyle headerSubtitleStyle;
@@ -54,35 +45,16 @@ namespace JaimeCamachoDev.Multitool
         private GUIStyle toolCardTitleStyle;
         private GUIStyle toolCardDescriptionStyle;
         private GUIStyle openToolButtonStyle;
-        private GUIStyle newBadgeStyle;
         private GUIStyle emptyStateLabelStyle;
 
         private Texture2D selectedCategoryBackground;
 
-        [MenuItem("Tools/JaimeCamachoDev/Multitool/Open Hub")]
+        [MenuItem("JaimeCamachoDev/Multitool/Open Hub")]
         public static void ShowWindow()
         {
             MultitoolHubWindow window = GetWindow<MultitoolHubWindow>("Multitool");
             window.minSize = new Vector2(780f, 500f);
             window.InitializeData();
-        }
-
-        public static void ShowTool(string toolName)
-        {
-            pendingToolActivation = toolName;
-            ShowWindow();
-        }
-
-        [MenuItem("Tools/JaimeCamachoDev/Multitool/Modelado/Advanced Mesh Combiner", priority = 10)]
-        public static void OpenAdvancedMeshCombiner()
-        {
-            ShowTool("Advanced Mesh Combiner");
-        }
-
-        [MenuItem("Tools/JaimeCamachoDev/Multitool/Modelado/Pivot mover & aligner", priority = 11)]
-        public static void OpenPivotMover()
-        {
-            ShowTool("Pivot mover & aligner");
         }
 
         private void OnEnable()
@@ -99,164 +71,142 @@ namespace JaimeCamachoDev.Multitool
         private void InitializeData()
         {
             BuildCatalog();
-
-            if (!string.IsNullOrEmpty(pendingToolActivation))
-            {
-                ToolDefinition pending = tools.FirstOrDefault(t => string.Equals(t.Name, pendingToolActivation, StringComparison.OrdinalIgnoreCase));
-                if (pending != null)
-                {
-                    currentCategory = pending.Category;
-                    ActivateTool(pending);
-                }
-
-                pendingToolActivation = null;
-            }
-
+            BuildDescriptions();
+            BuildToolActions();
             InitializeStyles();
         }
 
-        
         private void BuildCatalog()
         {
-            tools.Clear();
+            categoryTools.Clear();
 
-            RegisterTool(Category.Modelado, "Advanced Mesh Combiner",
-                "Fusiona múltiples MeshRenderers y SkinnedMeshRenderers en un mesh optimizado agrupando materiales, creando colliders opcionales y guardando assets listos para VR.",
-                MeshCombinerTool.DrawTool,
-                isNew: true);
-
-            RegisterTool(Category.Modelado, "Pivot mover & aligner",
-                "Reposiciona el pivote con asas en escena, presets de anclaje y preservación de hijos/colliders para iterar props rápido.",
-                PivotAdjusterTool.DrawTool,
-                PivotAdjusterTool.EnableSceneView,
-                PivotAdjusterTool.DisableSceneView,
-                isNew: true);
-
-            RegisterTool(Category.Modelado, "Remove not visible vertex",
-                "Limpia vértices ocultos para reducir el peso de tus modelos (en desarrollo).");
-
-            RegisterTool(Category.Modelado, "Hollow shell",
-                "Genera una versión hueca del mesh para props o elementos ligeros.",
-                HollowShellMeshTool.DrawTool);
-
-            RegisterTool(Category.Modelado, "Multi material Finder",
-                "Detecta rápidamente los materiales utilizados por una malla.",
-                MultiMaterialFinderTool.DrawTool);
-
-            RegisterTool(Category.Modelado, "Multi material splitter",
-                "Separa una malla según los materiales asignados.",
-                MultimaterialMeshSplitterTool.DrawTool);
-
-            RegisterTool(Category.Modelado, "Vertex ID Display",
-                "Visualiza IDs de vértice directamente en la escena para depurar.",
-                VertexIDDisplayerTool.DrawTool);
-
-            RegisterTool(Category.Modelado, "Micro triangle detector",
-                "Resalta los triángulos problemáticos que pueden generar artefactos.",
-                MicroTrianglesDetectorTool.DrawTool,
-                MicroTrianglesDetectorTool.EnableSceneView,
-                MicroTrianglesDetectorTool.DisableSceneView);
-
-            RegisterTool(Category.Animacion, "Remove blendshapes",
-                "Elimina blendshapes innecesarios para aligerar tus modelos animados.",
-                BlendshapeRemovalTool.DrawTool);
-
-            RegisterTool(Category.Animacion, "Animation terminator",
-                "Recorta clips de animación hasta un frame específico.",
-                AnimationTerminatorTool.DrawTool);
-
-            RegisterTool(Category.Animacion, "Bake pose",
-                "Aplica la pose actual de una malla skinneda a un mesh estático.",
-                BakeMeshTool.DrawTool);
-
-            RegisterTool(Category.Animacion, "Combine animations/ors into one",
-                "Fusiona varias animaciones en un solo clip optimizado.",
-                CombineAnimationsWithPathsTool.DrawTool);
-
-            RegisterTool(Category.Animacion, "Transfer bone weight",
-                "Transfiere pesos de hueso entre mallas con distinta topología.",
-                BoneWeightTransferTool.DrawTool);
-
-            RegisterTool(Category.Animacion, "VAT Baker from Animation Clip",
-                "Genera texturas VAT a partir de un clip de animación.",
-                AnimationClipTextureBakerTool.DrawTool);
-
-            RegisterTool(Category.Animacion, "VAT All in One",
-                "Paquete completo de herramientas VAT (en desarrollo).");
-
-            RegisterTool(Category.Texturas, "Convert Asset to Image",
-                "Convierte assets de texturas en imágenes y viceversa.",
-                AssetToImageConverterTool.DrawTool);
-
-            RegisterTool(Category.Texturas, "Split texture into channels",
-                "Extrae canales RGBA independientes utilizando ffmpeg.",
-                ImageChannelSplitterTool.DrawTool);
-
-            RegisterTool(Category.Texturas, "Merge textures into one",
-                "Combina cuatro texturas en un solo mapa RGBA.",
-                ImageChannelMergerTool.DrawTool);
-
-            RegisterTool(Category.Texturas, "Extract frames from video",
-                "Exporta fotogramas individuales a partir de un vídeo.",
-                VideoToFramesExtractorTool.DrawTool);
-
-            RegisterTool(Category.Texturas, "Convert sprites to animation clip",
-                "Genera clips de animación a partir de sprites 2D.",
-                UIAnimationClipGeneratorTool.DrawTool);
-
-            RegisterTool(Category.Iluminacion, "Generate mesh uv lightmaps",
-                "Crea coordenadas UV2 automáticas listas para bake de luz.",
-                UV2GeneratorTool.DrawTool);
-
-            RegisterTool(Category.Iluminacion, "Move UV inside grid",
-                "Ajusta UVs para mantenerlos dentro del tile principal.",
-                UVAdjusterToolOpti.DrawTool);
-
-            RegisterTool(Category.Iluminacion, "Lightmap checker",
-                "Inspecciona y visualiza lightmaps en la escena actual.",
-                LightmapCheckerTool.DrawTool);
-
-            RegisterTool(Category.Iluminacion, "Recalculate Mesh Bounds",
-                "Ajusta los bounds de tus meshes para mejorar el culling.",
-                () =>
-                {
-                    if (Selection.activeGameObject != null)
-                    {
-                        MeshFilter meshFilter = Selection.activeGameObject.GetComponent<MeshFilter>();
-                        if (meshFilter != null)
-                        {
-                            RecalculateMeshBoundsTool.SetTarget(meshFilter);
-                        }
-                    }
-
-                    RecalculateMeshBoundsTool.DrawTool();
-                },
-                RecalculateMeshBoundsTool.EnableSceneView,
-                RecalculateMeshBoundsTool.DisableSceneView);
-
-            RegisterTool(Category.Miscelanea, "Renamer",
-                "Renombra objetos y assets en bloque con reglas flexibles.",
-                RenameTool.DrawTool);
-        }
-
-        private void RegisterTool(Category category, string name, string description, Action drawer = null, Action activate = null, Action deactivate = null, bool isNew = false)
-        {
-            tools.Add(new ToolDefinition
+            categoryTools[Category.Modelado] = new List<string>
             {
-                Category = category,
-                Name = name,
-                Description = description,
-                Drawer = drawer,
-                Activate = activate,
-                Deactivate = deactivate,
-                IsNew = isNew
-            });
+                "Merge mesh and create atlas",
+                "Remove not visible vertex",
+                "Hollow shell",
+                "Multi material Finder",
+                "Multi material splitter",
+                "Vertex ID Display",
+                "Micro triangle detector"
+            };
+
+            categoryTools[Category.Animacion] = new List<string>
+            {
+                "Remove blendshapes",
+                "Animation terminator",
+                "Bake pose",
+                "Combine animations/ors into one",
+                "Transfer bone weight",
+                "VAT Baker from Animation Clip",
+                "VAT All in One"
+            };
+
+            categoryTools[Category.Texturas] = new List<string>
+            {
+                "Convert Asset to Image",
+                "Split texture into channels",
+                "Merge textures into one",
+                "Extract frames from video",
+                "Convert sprites to animation clip"
+            };
+
+            categoryTools[Category.Iluminacion] = new List<string>
+            {
+                "Generate mesh uv lightmaps",
+                "Move UV inside grid",
+                "Lightmap checker",
+                "Recalculate Mesh Bounds"
+            };
+
+            categoryTools[Category.Miscelanea] = new List<string>
+            {
+                "Renamer"
+            };
         }
 
+        private void BuildDescriptions()
+        {
+            toolDescriptions.Clear();
 
-        
+            toolDescriptions["Merge mesh and create atlas"] = "Combina mallas en una sola malla y optimiza sus materiales en un atlas (en desarrollo).";
+            toolDescriptions["Remove not visible vertex"] = "Limpia vrtices ocultos para reducir el peso de tus modelos (en desarrollo).";
+            toolDescriptions["Hollow shell"] = "Genera una versin hueca del mesh para props o elementos ligeros.";
+            toolDescriptions["Multi material Finder"] = "Detecta rpidamente los materiales utilizados por una malla.";
+            toolDescriptions["Multi material splitter"] = "Separa una malla segn los materiales asignados.";
+            toolDescriptions["Vertex ID Display"] = "Visualiza IDs de vrtice directamente en la escena para depurar.";
+            toolDescriptions["Micro triangle detector"] = "Resalta los triángulos problemáticos que pueden generar artefactos.";
 
-        
+            toolDescriptions["Remove blendshapes"] = "Elimina blendshapes innecesarios para aligerar tus modelos animados.";
+            toolDescriptions["Animation terminator"] = "Recorta clips de animacin hasta un frame especfico.";
+            toolDescriptions["Bake pose"] = "Aplica la pose actual de una malla skinneda a un mesh esttico.";
+            toolDescriptions["Combine animations/ors into one"] = "Fusiona varias animaciones en un solo clip optimizado.";
+            toolDescriptions["Transfer bone weight"] = "Transfiere pesos de hueso entre mallas con distinta topologa.";
+            toolDescriptions["VAT Baker from Animation Clip"] = "Genera texturas VAT a partir de un clip de animacin.";
+            toolDescriptions["VAT All in One"] = "Paquete completo de herramientas VAT (en desarrollo).";
+
+            toolDescriptions["Convert Asset to Image"] = "Convierte assets de texturas en imágenes y viceversa.";
+            toolDescriptions["Split texture into channels"] = "Extrae canales RGBA independientes utilizando ffmpeg.";
+            toolDescriptions["Merge textures into one"] = "Combina cuatro texturas en un solo mapa RGBA.";
+            toolDescriptions["Extract frames from video"] = "Exporta fotogramas individuales a partir de un vdeo.";
+            toolDescriptions["Convert sprites to animation clip"] = "Genera clips de animacin a partir de sprites 2D.";
+
+            toolDescriptions["Generate mesh uv lightmaps"] = "Crea coordenadas UV2 automticas listas para bake de luz.";
+            toolDescriptions["Move UV inside grid"] = "Ajusta UVs para mantenerlos dentro del tile principal.";
+            toolDescriptions["Lightmap checker"] = "Inspecciona y visualiza lightmaps en la escena actual.";
+            toolDescriptions["Recalculate Mesh Bounds"] = "Ajusta los bounds de tus meshes para mejorar el culling.";
+
+            toolDescriptions["Renamer"] = "Renombra objetos y assets en bloque con reglas flexibles.";
+        }
+
+        private void BuildToolActions()
+        {
+            toolDrawers.Clear();
+            toolActivations.Clear();
+            toolDeactivations.Clear();
+
+            toolDrawers["Convert Asset to Image"] = AssetToImageConverterTool.DrawTool;
+            toolDrawers["Split texture into channels"] = ImageChannelSplitterTool.DrawTool;
+            toolDrawers["Merge textures into one"] = ImageChannelMergerTool.DrawTool;
+            toolDrawers["Extract frames from video"] = VideoToFramesExtractorTool.DrawTool;
+            toolDrawers["Convert sprites to animation clip"] = UIAnimationClipGeneratorTool.DrawTool;
+
+            toolDrawers["Remove blendshapes"] = BlendshapeRemovalTool.DrawTool;
+            toolDrawers["Animation terminator"] = AnimationTerminatorTool.DrawTool;
+            toolDrawers["Bake pose"] = BakeMeshTool.DrawTool;
+            toolDrawers["Combine animations/ors into one"] = CombineAnimationsWithPathsTool.DrawTool;
+            toolDrawers["Transfer bone weight"] = BoneWeightTransferTool.DrawTool;
+            toolDrawers["VAT Baker from Animation Clip"] = AnimationClipTextureBakerTool.DrawTool;
+
+            toolDrawers["Lightmap checker"] = LightmapCheckerTool.DrawTool;
+            toolDrawers["Renamer"] = RenameTool.DrawTool;
+            toolDrawers["Hollow shell"] = HollowShellMeshTool.DrawTool;
+            toolDrawers["Multi material Finder"] = MultiMaterialFinderTool.DrawTool;
+            toolDrawers["Multi material splitter"] = MultimaterialMeshSplitterTool.DrawTool;
+            toolDrawers["Generate mesh uv lightmaps"] = UV2GeneratorTool.DrawTool;
+            toolDrawers["Move UV inside grid"] = UVAdjusterToolOpti.DrawTool;
+            toolDrawers["Vertex ID Display"] = VertexIDDisplayerTool.DrawTool;
+            toolDrawers["Micro triangle detector"] = MicroTrianglesDetectorTool.DrawTool;
+            toolDrawers["Recalculate Mesh Bounds"] = () =>
+            {
+                if (Selection.activeGameObject != null)
+                {
+                    MeshFilter meshFilter = Selection.activeGameObject.GetComponent<MeshFilter>();
+                    if (meshFilter != null)
+                    {
+                        RecalculateMeshBoundsTool.SetTarget(meshFilter);
+                    }
+                }
+
+                RecalculateMeshBoundsTool.DrawTool();
+            };
+
+            toolActivations["Recalculate Mesh Bounds"] = RecalculateMeshBoundsTool.EnableSceneView;
+            toolDeactivations["Recalculate Mesh Bounds"] = RecalculateMeshBoundsTool.DisableSceneView;
+
+            toolActivations["Micro triangle detector"] = MicroTrianglesDetectorTool.EnableSceneView;
+            toolDeactivations["Micro triangle detector"] = MicroTrianglesDetectorTool.DisableSceneView;
+        }
 
         private void InitializeStyles()
         {
@@ -350,12 +300,6 @@ namespace JaimeCamachoDev.Multitool
                 fixedHeight = 24
             };
 
-            newBadgeStyle = new GUIStyle(EditorStyles.miniBoldLabel)
-            {
-                alignment = TextAnchor.MiddleRight,
-                normal = { textColor = isProSkin ? new Color(0.33f, 0.74f, 1f) : new Color(0.1f, 0.37f, 0.74f) }
-            };
-
             emptyStateLabelStyle = new GUIStyle(EditorStyles.wordWrappedLabel)
             {
                 fontSize = 12,
@@ -401,7 +345,7 @@ namespace JaimeCamachoDev.Multitool
 
                 GUILayout.BeginVertical();
                 {
-                    if (activeTool == null)
+                    if (!toolActive)
                     {
                         DrawToolLibrary();
                     }
@@ -455,7 +399,8 @@ namespace JaimeCamachoDev.Multitool
             if (GUILayout.Button(label, style))
             {
                 currentCategory = category;
-                DeactivateActiveTool();
+                toolActive = false;
+                activeTool = string.Empty;
             }
         }
 
@@ -466,14 +411,13 @@ namespace JaimeCamachoDev.Multitool
 
             GUILayout.Space(4f);
 
-            List<ToolDefinition> filteredTools = tools
-                .Where(t => t.Category == currentCategory &&
-                            (string.IsNullOrEmpty(searchQuery) || t.Name.IndexOf(searchQuery, StringComparison.OrdinalIgnoreCase) >= 0))
+            List<string> tools = categoryTools[currentCategory]
+                .Where(t => string.IsNullOrEmpty(searchQuery) || t.IndexOf(searchQuery, StringComparison.OrdinalIgnoreCase) >= 0)
                 .ToList();
 
             libraryScrollPosition = EditorGUILayout.BeginScrollView(libraryScrollPosition);
 
-            if (filteredTools.Count == 0)
+            if (tools.Count == 0)
             {
                 GUILayout.FlexibleSpace();
                 GUILayout.Label("No se encontraron herramientas que coincidan con la búsqueda actual.", emptyStateLabelStyle);
@@ -481,9 +425,9 @@ namespace JaimeCamachoDev.Multitool
             }
             else
             {
-                foreach (ToolDefinition tool in filteredTools)
+                foreach (string toolName in tools)
                 {
-                    DrawToolCard(tool);
+                    DrawToolCard(toolName);
                 }
             }
 
@@ -510,24 +454,16 @@ namespace JaimeCamachoDev.Multitool
             }
         }
 
-        private void DrawToolCard(ToolDefinition tool)
+        private void DrawToolCard(string toolName)
         {
-            bool toolAvailable = tool.IsImplemented;
+            bool toolAvailable = toolDrawers.ContainsKey(toolName);
 
             GUILayout.BeginVertical(toolCardStyle);
-            using (new EditorGUILayout.HorizontalScope())
-            {
-                GUILayout.Label(tool.Name, toolCardTitleStyle);
-                GUILayout.FlexibleSpace();
-                if (tool.IsNew)
-                {
-                    GUILayout.Label("Nuevo", newBadgeStyle ?? EditorStyles.miniBoldLabel, GUILayout.Width(60f));
-                }
-            }
+            GUILayout.Label(toolName, toolCardTitleStyle);
 
-            if (!string.IsNullOrEmpty(tool.Description))
+            if (toolDescriptions.TryGetValue(toolName, out string description) && !string.IsNullOrEmpty(description))
             {
-                GUILayout.Label(tool.Description, toolCardDescriptionStyle);
+                GUILayout.Label(description, toolCardDescriptionStyle);
             }
 
             GUILayout.Space(8f);
@@ -537,7 +473,7 @@ namespace JaimeCamachoDev.Multitool
                 string buttonLabel = toolAvailable ? "Abrir herramienta" : "Próximamente";
                 if (GUILayout.Button(buttonLabel, openToolButtonStyle))
                 {
-                    ActivateTool(tool);
+                    ActivateTool(toolName);
                 }
             }
 
@@ -550,19 +486,22 @@ namespace JaimeCamachoDev.Multitool
             GUILayout.EndVertical();
         }
 
-        private void ActivateTool(ToolDefinition tool)
+        private void ActivateTool(string toolName)
         {
-            if (activeTool == tool)
+            if (toolActive && activeTool == toolName)
             {
                 return;
             }
 
             DeactivateActiveTool();
 
-            activeTool = tool;
+            activeTool = toolName;
+            toolActive = true;
 
-            activeTool?.Activate?.Invoke();
-            toolScrollPosition = Vector2.zero;
+            if (toolActivations.TryGetValue(toolName, out Action activate))
+            {
+                activate.Invoke();
+            }
         }
 
         private void DrawActiveTool()
@@ -578,21 +517,15 @@ namespace JaimeCamachoDev.Multitool
                 }
 
                 GUILayout.Space(6f);
-                GUILayout.Label(activeTool?.Name ?? string.Empty, toolCardTitleStyle);
+                GUILayout.Label(activeTool, toolCardTitleStyle);
                 GUILayout.FlexibleSpace();
             }
 
             toolScrollPosition = EditorGUILayout.BeginScrollView(toolScrollPosition);
 
-            if (!string.IsNullOrEmpty(activeTool?.Description))
+            if (toolDrawers.TryGetValue(activeTool, out Action drawAction))
             {
-                EditorGUILayout.HelpBox(activeTool.Description, MessageType.Info);
-                GUILayout.Space(6f);
-            }
-
-            if (activeTool?.Drawer != null)
-            {
-                activeTool.Drawer.Invoke();
+                drawAction.Invoke();
             }
             else
             {
@@ -605,13 +538,18 @@ namespace JaimeCamachoDev.Multitool
 
         private void DeactivateActiveTool()
         {
-            if (activeTool == null)
+            if (!toolActive)
             {
                 return;
             }
 
-            activeTool.Deactivate?.Invoke();
-            activeTool = null;
+            if (toolDeactivations.TryGetValue(activeTool, out Action deactivate))
+            {
+                deactivate.Invoke();
+            }
+
+            toolActive = false;
+            activeTool = string.Empty;
             toolScrollPosition = Vector2.zero;
         }
     }
