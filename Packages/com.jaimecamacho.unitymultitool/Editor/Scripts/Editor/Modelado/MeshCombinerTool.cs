@@ -22,6 +22,9 @@ namespace JaimeCamachoDev.Multitool.Modeling
         private static string outputMeshName = "CombinedMesh";
         private static DefaultAsset outputFolder;
         private static readonly HashSet<int> rendererIds = new HashSet<int>();
+        private static bool showSelectionInsights = true;
+        private static bool showAdvancedSettings;
+        private static readonly List<string> reusableBuffer = new List<string>();
 
         public static void DrawTool()
         {
@@ -39,10 +42,17 @@ namespace JaimeCamachoDev.Multitool.Modeling
             includeSkinnedMeshes = EditorGUILayout.ToggleLeft("Convertir SkinnedMeshRenderers a mesh estático", includeSkinnedMeshes);
             mergeByMaterial = EditorGUILayout.ToggleLeft("Agrupar por material (reduce draw calls)", mergeByMaterial);
             alignToBoundsCenter = EditorGUILayout.ToggleLeft("Colocar el nuevo objeto en el centro del bound combinado", alignToBoundsCenter);
-            parentUnderActive = EditorGUILayout.ToggleLeft("Mantener el nuevo objeto bajo el padre del activo", parentUnderActive);
-            addMeshCollider = EditorGUILayout.ToggleLeft("Añadir MeshCollider al resultado", addMeshCollider);
-            copyLightmapSettings = EditorGUILayout.ToggleLeft("Copiar configuración de lightmap del primer renderer", copyLightmapSettings);
-            disableOriginalRenderers = EditorGUILayout.ToggleLeft("Desactivar renderers originales tras combinar", disableOriginalRenderers);
+
+            showAdvancedSettings = EditorGUILayout.Foldout(showAdvancedSettings, "Opciones avanzadas", true);
+            if (showAdvancedSettings)
+            {
+                EditorGUI.indentLevel++;
+                parentUnderActive = EditorGUILayout.ToggleLeft("Mantener el nuevo objeto bajo el padre del activo", parentUnderActive);
+                addMeshCollider = EditorGUILayout.ToggleLeft("Añadir MeshCollider al resultado", addMeshCollider);
+                copyLightmapSettings = EditorGUILayout.ToggleLeft("Copiar configuración de lightmap del primer renderer", copyLightmapSettings);
+                disableOriginalRenderers = EditorGUILayout.ToggleLeft("Desactivar renderers originales tras combinar", disableOriginalRenderers);
+                EditorGUI.indentLevel--;
+            }
 
             GUILayout.Space(6f);
 
@@ -69,11 +79,73 @@ namespace JaimeCamachoDev.Multitool.Modeling
 
             GUILayout.Space(6f);
 
-            List<Renderer> gatheredRenderers = GatherRenderers();
+            SelectionDiagnostics diagnostics = GatherSelectionDiagnostics();
+            List<Renderer> gatheredRenderers = diagnostics.renderers;
             int meshCount = gatheredRenderers.Count;
-            int vertexCount = CalculateVertexCount(gatheredRenderers);
+            int vertexCount = diagnostics.totalVertices;
             EditorGUILayout.LabelField("Renderers a combinar", meshCount.ToString());
             EditorGUILayout.LabelField("Vértices estimados", vertexCount.ToString());
+
+            if (vertexCount > 500000)
+            {
+                EditorGUILayout.HelpBox("La combinación supera los 500K vértices. Considera separar por materiales o dividir en bloques para evitar problemas de rendimiento.", MessageType.Warning);
+            }
+
+            if (diagnostics.skinnedRendererCount > 0 && !includeSkinnedMeshes)
+            {
+                EditorGUILayout.HelpBox("Hay SkinnedMeshRenderers seleccionados pero están deshabilitados en la combinación.", MessageType.Info);
+            }
+
+            foreach (string warning in diagnostics.warnings)
+            {
+                EditorGUILayout.HelpBox(warning, MessageType.Warning);
+            }
+
+            foreach (string note in diagnostics.notes)
+            {
+                EditorGUILayout.HelpBox(note, MessageType.None);
+            }
+
+            showSelectionInsights = EditorGUILayout.Foldout(showSelectionInsights, "Detalle de selección", true);
+            if (showSelectionInsights)
+            {
+                using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+                {
+                    EditorGUILayout.LabelField("MeshRenderers", diagnostics.meshRendererCount.ToString());
+                    EditorGUILayout.LabelField("SkinnedMeshRenderers", diagnostics.skinnedRendererCount.ToString());
+                    if (diagnostics.estimatedSubmeshCount > 0)
+                    {
+                        EditorGUILayout.LabelField("Submeshes detectados", diagnostics.estimatedSubmeshCount.ToString());
+                    }
+
+                    if (diagnostics.sampleNames.Count > 0)
+                    {
+                        EditorGUILayout.LabelField("Primeros objetos:");
+                        EditorGUI.indentLevel++;
+                        for (int i = 0; i < diagnostics.sampleNames.Count; i++)
+                        {
+                            EditorGUILayout.LabelField("• " + diagnostics.sampleNames[i]);
+                        }
+                        if (diagnostics.moreSamples)
+                        {
+                            EditorGUILayout.LabelField("…" + (meshCount - diagnostics.sampleNames.Count) + " objetos adicionales");
+                        }
+                        EditorGUI.indentLevel--;
+                    }
+
+                    if (diagnostics.skipped.Count > 0)
+                    {
+                        EditorGUILayout.Space(2f);
+                        EditorGUILayout.LabelField("Omitidos:");
+                        EditorGUI.indentLevel++;
+                        foreach (string skipped in diagnostics.skipped)
+                        {
+                            EditorGUILayout.LabelField("• " + skipped, EditorStyles.miniLabel);
+                        }
+                        EditorGUI.indentLevel--;
+                    }
+                }
+            }
 
             if (meshCount == 0)
             {
@@ -92,10 +164,10 @@ namespace JaimeCamachoDev.Multitool.Modeling
             }
         }
 
-        private static List<Renderer> GatherRenderers()
+        private static SelectionDiagnostics GatherSelectionDiagnostics()
         {
+            SelectionDiagnostics diagnostics = new SelectionDiagnostics();
             rendererIds.Clear();
-            List<Renderer> renderers = new List<Renderer>();
 
             foreach (GameObject root in Selection.gameObjects)
             {
@@ -120,33 +192,89 @@ namespace JaimeCamachoDev.Multitool.Modeling
                         MeshFilter filter = renderer.GetComponent<MeshFilter>();
                         if (filter == null || filter.sharedMesh == null)
                         {
+                            diagnostics.skipped.Add(renderer.name + " (MeshFilter vacío)");
                             continue;
                         }
+                        diagnostics.meshRendererCount++;
+                        diagnostics.estimatedSubmeshCount += filter.sharedMesh.subMeshCount;
                     }
                     else if (renderer is SkinnedMeshRenderer)
                     {
                         if (!includeSkinnedMeshes)
                         {
+                            diagnostics.skipped.Add(renderer.name + " (Skinned deshabilitado)");
                             continue;
                         }
 
                         SkinnedMeshRenderer skinned = (SkinnedMeshRenderer)renderer;
                         if (skinned.sharedMesh == null)
                         {
+                            diagnostics.skipped.Add(renderer.name + " (mesh vacío)");
                             continue;
                         }
+                        diagnostics.skinnedRendererCount++;
+                        diagnostics.estimatedSubmeshCount += skinned.sharedMesh.subMeshCount;
                     }
                     else
                     {
+                        diagnostics.skipped.Add(renderer.name + " (renderer no soportado)");
                         continue;
                     }
 
-                    renderers.Add(renderer);
+                    diagnostics.renderers.Add(renderer);
                     rendererIds.Add(renderer.GetInstanceID());
                 }
             }
 
-            return renderers;
+            diagnostics.totalVertices = CalculateVertexCount(diagnostics.renderers);
+            diagnostics.CaptureSamples();
+            diagnostics.notes.Add("Los renderers se combinan en espacio mundo y adoptan la rotación del activo seleccionado.");
+
+            if (!alignToBoundsCenter)
+            {
+                diagnostics.notes.Add("El objeto resultante usará la posición del activo seleccionado como pivote.");
+            }
+
+            if (!parentUnderActive)
+            {
+                diagnostics.notes.Add("El combinado se creará en la raíz de la escena.");
+            }
+
+            if (addMeshCollider)
+            {
+                diagnostics.notes.Add("Se añadirá un MeshCollider al objeto combinado.");
+            }
+
+            if (disableOriginalRenderers)
+            {
+                diagnostics.notes.Add("Los objetos originales se desactivarán tras combinar.");
+            }
+
+            if (saveMeshAsset)
+            {
+                string folderInfo = "Assets";
+                if (outputFolder != null)
+                {
+                    string path = AssetDatabase.GetAssetPath(outputFolder);
+                    if (!string.IsNullOrEmpty(path))
+                    {
+                        folderInfo = path;
+                    }
+                }
+                diagnostics.notes.Add($"Se generará un asset en '{folderInfo}'.");
+            }
+
+            if (diagnostics.skipped.Count > 0)
+            {
+                diagnostics.warnings.Add("Algunos renderers se omitieron (revisa el listado inferior).");
+            }
+
+            if (!mergeByMaterial && diagnostics.estimatedSubmeshCount > diagnostics.renderers.Count)
+            {
+                diagnostics.warnings.Add("Hay múltiples submeshes sin agrupar; considera activar 'Agrupar por material'.");
+            }
+
+            return diagnostics;
         }
 
         private static int CalculateVertexCount(List<Renderer> renderers)
@@ -200,7 +328,16 @@ namespace JaimeCamachoDev.Multitool.Modeling
                 Undo.SetTransformParent(combinedObject.transform, reference.parent, "Set combined parent");
             }
 
-            CombinePreparationResult preparation = PrepareCombineData(renderers, combinedObject.transform);
+            CombinePreparationResult preparation;
+            try
+            {
+                EditorUtility.DisplayProgressBar("Mesh Combiner", "Preparando instancias...", 0.25f);
+                preparation = PrepareCombineData(renderers, combinedObject.transform);
+            }
+            finally
+            {
+                EditorUtility.ClearProgressBar();
+            }
 
             if (preparation.instances.Count == 0)
             {
@@ -210,18 +347,27 @@ namespace JaimeCamachoDev.Multitool.Modeling
                 return;
             }
 
-            Mesh combinedMesh = new Mesh
+            Mesh combinedMesh;
+            try
             {
-                name = string.IsNullOrWhiteSpace(outputMeshName) ? "CombinedMesh" : outputMeshName
-            };
+                EditorUtility.DisplayProgressBar("Mesh Combiner", "Generando mesh combinado...", 0.65f);
+                combinedMesh = new Mesh
+                {
+                    name = string.IsNullOrWhiteSpace(outputMeshName) ? "CombinedMesh" : outputMeshName
+                };
 
-            if (estimatedVertices > 65535)
-            {
-                combinedMesh.indexFormat = IndexFormat.UInt32;
+                if (estimatedVertices > 65535)
+                {
+                    combinedMesh.indexFormat = IndexFormat.UInt32;
+                }
+
+                combinedMesh.CombineMeshes(preparation.instances.ToArray(), false, false, false);
+                combinedMesh.RecalculateBounds();
             }
-
-            combinedMesh.CombineMeshes(preparation.instances.ToArray(), false, false, false);
-            combinedMesh.RecalculateBounds();
+            finally
+            {
+                EditorUtility.ClearProgressBar();
+            }
 
             MeshFilter combinedFilter = combinedObject.AddComponent<MeshFilter>();
             combinedFilter.sharedMesh = combinedMesh;
@@ -242,7 +388,15 @@ namespace JaimeCamachoDev.Multitool.Modeling
 
             if (saveMeshAsset)
             {
-                SaveMeshAsset(combinedMesh);
+                try
+                {
+                    EditorUtility.DisplayProgressBar("Mesh Combiner", "Guardando asset...", 0.9f);
+                    SaveMeshAsset(combinedMesh);
+                }
+                finally
+                {
+                    EditorUtility.ClearProgressBar();
+                }
             }
 
             if (disableOriginalRenderers)
@@ -254,12 +408,20 @@ namespace JaimeCamachoDev.Multitool.Modeling
                 }
             }
 
-            foreach (Mesh mesh in preparation.temporaryMeshes)
+            try
             {
-                if (mesh != null)
+                EditorUtility.DisplayProgressBar("Mesh Combiner", "Limpiando temporales...", 0.98f);
+                foreach (Mesh mesh in preparation.temporaryMeshes)
                 {
-                    UnityEngine.Object.DestroyImmediate(mesh);
+                    if (mesh != null)
+                    {
+                        UnityEngine.Object.DestroyImmediate(mesh);
+                    }
                 }
+            }
+            finally
+            {
+                EditorUtility.ClearProgressBar();
             }
 
             Undo.CollapseUndoOperations(undoGroup);
@@ -433,6 +595,38 @@ namespace JaimeCamachoDev.Multitool.Modeling
             public readonly List<CombineInstance> instances = new List<CombineInstance>();
             public readonly List<Material> materials = new List<Material>();
             public readonly List<Mesh> temporaryMeshes = new List<Mesh>();
+        }
+
+        private class SelectionDiagnostics
+        {
+            public readonly List<Renderer> renderers = new List<Renderer>();
+            public readonly List<string> warnings = new List<string>();
+            public readonly List<string> notes = new List<string>();
+            public readonly List<string> skipped = new List<string>();
+            public readonly List<string> sampleNames = new List<string>();
+            public int meshRendererCount;
+            public int skinnedRendererCount;
+            public int totalVertices;
+            public int estimatedSubmeshCount;
+            public bool moreSamples;
+
+            public void CaptureSamples()
+            {
+                sampleNames.Clear();
+                reusableBuffer.Clear();
+                for (int i = 0; i < renderers.Count; i++)
+                {
+                    reusableBuffer.Add(renderers[i].name);
+                }
+                reusableBuffer.Sort();
+
+                int sampleLimit = Mathf.Min(5, reusableBuffer.Count);
+                for (int i = 0; i < sampleLimit; i++)
+                {
+                    sampleNames.Add(reusableBuffer[i]);
+                }
+                moreSamples = reusableBuffer.Count > sampleLimit;
+            }
         }
     }
 }

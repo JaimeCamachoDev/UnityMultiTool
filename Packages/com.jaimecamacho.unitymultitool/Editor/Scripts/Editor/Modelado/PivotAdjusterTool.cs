@@ -27,7 +27,16 @@ namespace JaimeCamachoDev.Multitool.Modeling
         private static bool createNewMeshInstance = true;
         private static bool saveNewMeshAsAsset = true;
         private static bool alignHandleToActiveRotation = false;
+        private static bool showAdvancedOptions;
+        private static bool showReferenceOptions = true;
+        private static bool enablePivotGridSnap;
+        private static float pivotGridSize = 0.1f;
         private static DefaultAsset pivotAssetFolder;
+        private static bool useReferenceObject;
+        private static bool autoFollowReference = true;
+        private static bool referenceUseBounds = true;
+        private static Vector3 referenceLocalOffset = Vector3.zero;
+        private static GameObject pivotReferenceObject;
 
         private static Vector3 customPivotWorld;
         private static bool pivotInitialized;
@@ -82,17 +91,29 @@ namespace JaimeCamachoDev.Multitool.Modeling
 
             includeChildrenBounds = EditorGUILayout.ToggleLeft("Calcular bounds incluyendo hijos", includeChildrenBounds);
             applyPerObject = EditorGUILayout.ToggleLeft("Calcular preset por objeto", applyPerObject);
-            preserveChildren = EditorGUILayout.ToggleLeft("Mantener posición global de los hijos", preserveChildren);
-            updateMeshColliders = EditorGUILayout.ToggleLeft("Actualizar MeshCollider si existe", updateMeshColliders);
-            createNewMeshInstance = EditorGUILayout.ToggleLeft("Duplicar mesh antes de editar", createNewMeshInstance);
-            using (new EditorGUI.DisabledScope(!createNewMeshInstance))
+
+            showAdvancedOptions = EditorGUILayout.Foldout(showAdvancedOptions, "Ajustes avanzados", true);
+            if (showAdvancedOptions)
             {
-                saveNewMeshAsAsset = EditorGUILayout.ToggleLeft("Guardar mesh duplicado como asset", saveNewMeshAsAsset);
                 EditorGUI.indentLevel++;
-                pivotAssetFolder = (DefaultAsset)EditorGUILayout.ObjectField("Carpeta destino", pivotAssetFolder, typeof(DefaultAsset), false);
+                preserveChildren = EditorGUILayout.ToggleLeft("Mantener posición global de los hijos", preserveChildren);
+                updateMeshColliders = EditorGUILayout.ToggleLeft("Actualizar MeshCollider si existe", updateMeshColliders);
+                createNewMeshInstance = EditorGUILayout.ToggleLeft("Duplicar mesh antes de editar", createNewMeshInstance);
+                using (new EditorGUI.DisabledScope(!createNewMeshInstance))
+                {
+                    saveNewMeshAsAsset = EditorGUILayout.ToggleLeft("Guardar mesh duplicado como asset", saveNewMeshAsAsset);
+                    EditorGUI.indentLevel++;
+                    pivotAssetFolder = (DefaultAsset)EditorGUILayout.ObjectField("Carpeta destino", pivotAssetFolder, typeof(DefaultAsset), false);
+                    EditorGUI.indentLevel--;
+                }
+                alignHandleToActiveRotation = EditorGUILayout.ToggleLeft("Alinear gizmo a la rotación del activo", alignHandleToActiveRotation);
+                enablePivotGridSnap = EditorGUILayout.ToggleLeft("Activar snap en la escena", enablePivotGridSnap);
+                using (new EditorGUI.DisabledScope(!enablePivotGridSnap))
+                {
+                    pivotGridSize = EditorGUILayout.FloatField("Tamaño del snap (m)", Mathf.Max(0.001f, pivotGridSize));
+                }
                 EditorGUI.indentLevel--;
             }
-            alignHandleToActiveRotation = EditorGUILayout.ToggleLeft("Alinear gizmo a la rotación del activo", alignHandleToActiveRotation);
 
             GUILayout.Space(6f);
 
@@ -107,6 +128,59 @@ namespace JaimeCamachoDev.Multitool.Modeling
             else
             {
                 EditorGUILayout.HelpBox("El pivote se tomará del preset seleccionado. Puedes refinarlo moviendo el gizmo.", MessageType.None);
+            }
+
+            GUILayout.Space(6f);
+
+            showReferenceOptions = EditorGUILayout.Foldout(showReferenceOptions, "Referencia externa", true);
+            if (showReferenceOptions)
+            {
+                EditorGUI.indentLevel++;
+                bool useReferenceBefore = useReferenceObject;
+                useReferenceObject = EditorGUILayout.ToggleLeft("Usar objeto como referencia", useReferenceObject);
+                if (useReferenceObject && !useReferenceBefore)
+                {
+                    AlignGizmoToReference(true);
+                }
+
+                using (new EditorGUI.DisabledScope(!useReferenceObject))
+                {
+                    GameObject previousReference = pivotReferenceObject;
+                    pivotReferenceObject = (GameObject)EditorGUILayout.ObjectField("Objeto de referencia", pivotReferenceObject, typeof(GameObject), true);
+                    if (pivotReferenceObject != null && pivotReferenceObject != previousReference)
+                    {
+                        AlignGizmoToReference(true);
+                    }
+                    bool previousReferenceBounds = referenceUseBounds;
+                    referenceUseBounds = EditorGUILayout.ToggleLeft("Tomar centro del bound de la referencia", referenceUseBounds);
+                    if (autoFollowReference && referenceUseBounds != previousReferenceBounds)
+                    {
+                        AlignGizmoToReference(true);
+                    }
+
+                    Vector3 previousOffset = referenceLocalOffset;
+                    referenceLocalOffset = EditorGUILayout.Vector3Field("Offset local adicional", referenceLocalOffset);
+                    if (autoFollowReference && previousOffset != referenceLocalOffset)
+                    {
+                        AlignGizmoToReference(true);
+                    }
+                    bool previousAutoFollow = autoFollowReference;
+                    autoFollowReference = EditorGUILayout.ToggleLeft("Mantener gizmo sincronizado con la referencia", autoFollowReference);
+                    if (autoFollowReference && !previousAutoFollow)
+                    {
+                        AlignGizmoToReference(true);
+                    }
+                    if (GUILayout.Button("Alinear gizmo a la referencia"))
+                    {
+                        AlignGizmoToReference(true);
+                    }
+                }
+                EditorGUI.indentLevel--;
+            }
+
+            if (useReferenceObject && pivotReferenceObject != null && !autoFollowReference)
+            {
+                EditorGUILayout.HelpBox("El gizmo usa la posición de la referencia actual pero el seguimiento automático está desactivado.", MessageType.Info);
             }
 
             GUILayout.Space(10f);
@@ -132,6 +206,11 @@ namespace JaimeCamachoDev.Multitool.Modeling
                 UpdateHandleFromSelection(true);
             }
 
+            if (useReferenceObject && pivotReferenceObject != null && autoFollowReference && pivotAnchor == PivotAnchor.Custom)
+            {
+                AlignGizmoToReference(false, false);
+            }
+
             Handles.color = new Color(0f, 0.82f, 0.98f, 0.95f);
             Quaternion handleRotation = alignHandleToActiveRotation && Selection.activeTransform != null
                 ? Selection.activeTransform.rotation
@@ -139,14 +218,25 @@ namespace JaimeCamachoDev.Multitool.Modeling
 
             EditorGUI.BeginChangeCheck();
             Vector3 newPosition = Handles.PositionHandle(customPivotWorld, handleRotation);
+            if (enablePivotGridSnap && pivotGridSize > 0f)
+            {
+                newPosition = SnapVector(newPosition, pivotGridSize);
+            }
             if (EditorGUI.EndChangeCheck())
             {
                 customPivotWorld = newPosition;
                 pivotAnchor = PivotAnchor.Custom;
+                autoFollowReference = false;
                 SceneView.RepaintAll();
             }
 
             Handles.SphereHandleCap(0, customPivotWorld, Quaternion.identity, HandleUtility.GetHandleSize(customPivotWorld) * 0.08f, EventType.Repaint);
+
+            if (useReferenceObject && pivotReferenceObject != null)
+            {
+                Handles.color = new Color(0f, 0.82f, 0.98f, 0.4f);
+                Handles.DrawDottedLine(pivotReferenceObject.transform.position, customPivotWorld, 4f);
+            }
         }
 
         private static void OnSelectionChanged()
@@ -163,7 +253,7 @@ namespace JaimeCamachoDev.Multitool.Modeling
                 return;
             }
 
-            if (resetCustom && pivotAnchor == PivotAnchor.Custom)
+            if (resetCustom && pivotAnchor == PivotAnchor.Custom && (!useReferenceObject || pivotReferenceObject == null))
             {
                 pivotAnchor = PivotAnchor.BoundsCenter;
             }
@@ -181,7 +271,7 @@ namespace JaimeCamachoDev.Multitool.Modeling
 
             if (anchor == PivotAnchor.Custom)
             {
-                return customPivotWorld;
+                return ResolveCustomPivotWorld();
             }
 
             Bounds? bounds = CalculateObjectBounds(target, includeChildren);
@@ -297,7 +387,7 @@ namespace JaimeCamachoDev.Multitool.Modeling
                     continue;
                 }
 
-                Vector3 targetPivot = pivotAnchor == PivotAnchor.Custom ? customPivotWorld : ResolvePivotWorld(go, pivotAnchor, includeChildrenBounds);
+                Vector3 targetPivot = pivotAnchor == PivotAnchor.Custom ? ResolveCustomPivotWorld() : ResolvePivotWorld(go, pivotAnchor, includeChildrenBounds);
                 if (pivotAnchor != PivotAnchor.Custom && !applyPerObject)
                 {
                     targetPivot = sharedPivot;
@@ -313,7 +403,7 @@ namespace JaimeCamachoDev.Multitool.Modeling
                 AssetDatabase.Refresh();
             }
 
-            customPivotWorld = pivotAnchor == PivotAnchor.Custom ? customPivotWorld : ResolvePivotWorld(reference.gameObject, pivotAnchor, includeChildrenBounds);
+            customPivotWorld = pivotAnchor == PivotAnchor.Custom ? ResolveCustomPivotWorld() : ResolvePivotWorld(reference.gameObject, pivotAnchor, includeChildrenBounds);
             SceneView.RepaintAll();
         }
 
@@ -464,6 +554,72 @@ namespace JaimeCamachoDev.Multitool.Modeling
 
             AssetDatabase.CreateAsset(mesh, assetPath);
             assetSaveRequested = true;
+        }
+
+        private static void AlignGizmoToReference(bool forceCustom, bool requestRepaint = true)
+        {
+            if (!useReferenceObject || pivotReferenceObject == null)
+            {
+                return;
+            }
+
+            Vector3 referencePivot = GetReferencePivotWorld();
+            customPivotWorld = referencePivot;
+            if (forceCustom)
+            {
+                pivotAnchor = PivotAnchor.Custom;
+            }
+            pivotInitialized = true;
+            if (requestRepaint)
+            {
+                SceneView.RepaintAll();
+            }
+        }
+
+        private static Vector3 ResolveCustomPivotWorld()
+        {
+            if (useReferenceObject && pivotReferenceObject != null && autoFollowReference)
+            {
+                return GetReferencePivotWorld();
+            }
+
+            return customPivotWorld;
+        }
+
+        private static Vector3 GetReferencePivotWorld()
+        {
+            if (pivotReferenceObject == null)
+            {
+                return customPivotWorld;
+            }
+
+            Vector3 basePosition;
+            if (referenceUseBounds)
+            {
+                Bounds? bounds = CalculateObjectBounds(pivotReferenceObject, true);
+                basePosition = bounds?.center ?? pivotReferenceObject.transform.position;
+            }
+            else
+            {
+                basePosition = pivotReferenceObject.transform.position;
+            }
+
+            if (referenceLocalOffset != Vector3.zero)
+            {
+                basePosition += pivotReferenceObject.transform.TransformVector(referenceLocalOffset);
+            }
+
+            return basePosition;
+        }
+
+        private static Vector3 SnapVector(Vector3 value, float snap)
+        {
+            float Step(float component)
+            {
+                return Mathf.Round(component / snap) * snap;
+            }
+
+            return new Vector3(Step(value.x), Step(value.y), Step(value.z));
         }
     }
 }
