@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace JaimeCamachoDev.Multitool.Modeling
 {
@@ -25,53 +26,99 @@ namespace JaimeCamachoDev.Multitool.Modeling
             GUILayout.Label("Atlasizador de materiales", EditorStyles.boldLabel);
             EditorGUILayout.HelpBox("Convierte mallas combinadas con múltiples materiales en un único material con atlas.", MessageType.Info);
 
-            GameObject active = Selection.activeGameObject;
-            if (active == null)
+            if (Selection.gameObjects == null || Selection.gameObjects.Length == 0)
             {
-                EditorGUILayout.HelpBox("Selecciona un objeto con MeshRenderer para continuar.", MessageType.Warning);
+                EditorGUILayout.HelpBox("Selecciona al menos un objeto con MeshRenderer para continuar.", MessageType.Warning);
                 return;
             }
 
-            MeshRenderer renderer = active.GetComponent<MeshRenderer>();
-            MeshFilter filter = active.GetComponent<MeshFilter>();
-            if (renderer == null || filter == null)
+            SelectionContext context = BuildSelectionContext(out string selectionMessage, out MessageType messageType);
+            if (context == null)
             {
-                EditorGUILayout.HelpBox("El objeto activo necesita MeshRenderer y MeshFilter.", MessageType.Warning);
+                EditorGUILayout.HelpBox(selectionMessage, messageType);
                 return;
             }
 
-            Mesh mesh = filter.sharedMesh;
-            if (mesh == null)
-            {
-                EditorGUILayout.HelpBox("El MeshFilter no tiene mesh asignado.", MessageType.Warning);
-                return;
-            }
-
-            Material[] materials = renderer.sharedMaterials;
+            Material[] materials = context.MaterialArray;
             if (materials == null || materials.Length == 0)
             {
-                EditorGUILayout.HelpBox("No se detectaron materiales en el renderer.", MessageType.Warning);
+                EditorGUILayout.HelpBox("No se detectaron materiales en los MeshRenderers seleccionados.", MessageType.Warning);
                 return;
             }
 
-            if (materials.Length == 1)
+            if (!context.RequiresTemporaryMesh)
             {
-                EditorGUILayout.HelpBox("Este renderer ya utiliza un único material.", MessageType.Info);
-            }
+                Mesh mesh = context.TargetFilter.sharedMesh;
+                if (mesh == null)
+                {
+                    EditorGUILayout.HelpBox("El MeshFilter no tiene mesh asignado.", MessageType.Warning);
+                    return;
+                }
 
-            if (mesh.subMeshCount != materials.Length)
-            {
-                EditorGUILayout.HelpBox("El número de submeshes no coincide con la cantidad de materiales. El resultado puede no ser el esperado.", MessageType.Warning);
-            }
+                if (mesh.uv == null || mesh.uv.Length == 0)
+                {
+                    EditorGUILayout.HelpBox("La malla necesita UVs en el canal principal para generar el atlas.", MessageType.Error);
+                    return;
+                }
 
-            if (mesh.uv == null || mesh.uv.Length == 0)
+                if (mesh.subMeshCount != materials.Length)
+                {
+                    EditorGUILayout.HelpBox("El número de submeshes no coincide con la cantidad de materiales. El resultado puede no ser el esperado.", MessageType.Warning);
+                }
+            }
+            else if (context.SubMeshCount == 0)
             {
-                EditorGUILayout.HelpBox("La malla necesita UVs en el canal principal para generar el atlas.", MessageType.Error);
+                EditorGUILayout.HelpBox("No se detectaron submeshes válidos en la selección.", MessageType.Warning);
                 return;
             }
 
-            EditorGUILayout.LabelField("Materiales detectados", materials.Length.ToString());
-            EditorGUILayout.LabelField("Submeshes", mesh.subMeshCount.ToString());
+            EditorGUILayout.LabelField("MeshRenderers detectados", context.Renderers.Count.ToString());
+            EditorGUILayout.LabelField("Submeshes combinados", context.SubMeshCount.ToString());
+            EditorGUILayout.LabelField("Materiales totales", materials.Length.ToString());
+            EditorGUILayout.LabelField("Materiales únicos", context.UniqueMaterialCount.ToString());
+            EditorGUILayout.LabelField("Vértices estimados", context.VertexCount.ToString());
+
+            if (!HasMultipleMaterials(materials) && context.SubMeshCount <= 1)
+            {
+                EditorGUILayout.HelpBox("La selección ya utiliza un único material.", MessageType.Info);
+            }
+
+            if (context.RequiresTemporaryMesh)
+            {
+                string infoMessage = $"Se combinarán temporalmente {context.Renderers.Count} MeshRenderers y el resultado se aplicará al objeto activo '{context.TargetRenderer.name}'.";
+                EditorGUILayout.HelpBox(infoMessage, MessageType.Info);
+
+                using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+                {
+                    EditorGUILayout.LabelField("Objetos incluidos:");
+                    EditorGUI.indentLevel++;
+                    List<string> samples = context.GetRendererSamples();
+                    for (int i = 0; i < samples.Count; i++)
+                    {
+                        EditorGUILayout.LabelField("• " + samples[i], EditorStyles.miniLabel);
+                    }
+
+                    if (context.Renderers.Count > samples.Count)
+                    {
+                        EditorGUILayout.LabelField($"…{context.Renderers.Count - samples.Count} adicionales", EditorStyles.miniLabel);
+                    }
+                    EditorGUI.indentLevel--;
+                }
+            }
+
+            if (context.Skipped.Count > 0)
+            {
+                using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+                {
+                    EditorGUILayout.LabelField("Omitidos:");
+                    EditorGUI.indentLevel++;
+                    foreach (string skipped in context.Skipped)
+                    {
+                        EditorGUILayout.LabelField("• " + skipped, EditorStyles.miniLabel);
+                    }
+                    EditorGUI.indentLevel--;
+                }
+            }
 
             materialScroll = EditorGUILayout.BeginScrollView(materialScroll, GUILayout.Height(120f));
             for (int i = 0; i < materials.Length; i++)
@@ -130,7 +177,7 @@ namespace JaimeCamachoDev.Multitool.Modeling
 
             GUILayout.Space(10f);
 
-            bool canGenerateAtlas = HasMultipleMaterials(materials) || mesh.subMeshCount > 1;
+            bool canGenerateAtlas = HasMultipleMaterials(materials) || context.SubMeshCount > 1;
 
             if (!canGenerateAtlas)
             {
@@ -141,9 +188,110 @@ namespace JaimeCamachoDev.Multitool.Modeling
             {
                 if (GUILayout.Button("Generar atlas y material único"))
                 {
-                    ConvertSelection(renderer, filter, mesh, materials);
+                    ConvertSelection(context);
                 }
             }
+        }
+
+        private static SelectionContext BuildSelectionContext(out string message, out MessageType messageType)
+        {
+            message = string.Empty;
+            messageType = MessageType.None;
+
+            GameObject active = Selection.activeGameObject;
+            if (active == null)
+            {
+                message = "Selecciona un objeto con MeshRenderer para continuar.";
+                messageType = MessageType.Warning;
+                return null;
+            }
+
+            MeshRenderer targetRenderer = active.GetComponent<MeshRenderer>();
+            MeshFilter targetFilter = active.GetComponent<MeshFilter>();
+            if (targetRenderer == null || targetFilter == null)
+            {
+                message = "El objeto activo necesita MeshRenderer y MeshFilter.";
+                messageType = MessageType.Warning;
+                return null;
+            }
+
+            SelectionContext context = new SelectionContext(targetRenderer, targetFilter);
+            HashSet<int> processed = new HashSet<int>();
+            bool skippedForUv = false;
+
+            foreach (GameObject root in Selection.gameObjects)
+            {
+                if (root == null)
+                {
+                    continue;
+                }
+
+                MeshRenderer[] renderers = root.GetComponentsInChildren<MeshRenderer>(true);
+                foreach (MeshRenderer renderer in renderers)
+                {
+                    if (renderer == null)
+                    {
+                        continue;
+                    }
+
+                    if (!processed.Add(renderer.GetInstanceID()))
+                    {
+                        continue;
+                    }
+
+                    MeshFilter filter = renderer.GetComponent<MeshFilter>();
+                    if (filter == null)
+                    {
+                        context.Skipped.Add(renderer.name + " (sin MeshFilter)");
+                        continue;
+                    }
+
+                    Mesh sharedMesh = filter.sharedMesh;
+                    if (sharedMesh == null)
+                    {
+                        context.Skipped.Add(renderer.name + " (mesh vacío)");
+                        continue;
+                    }
+
+                    if (sharedMesh.subMeshCount == 0)
+                    {
+                        context.Skipped.Add(renderer.name + " (sin submeshes)");
+                        continue;
+                    }
+
+                    if (sharedMesh.uv == null || sharedMesh.uv.Length == 0)
+                    {
+                        context.Skipped.Add(renderer.name + " (sin UVs en canal principal)");
+                        skippedForUv = true;
+                        continue;
+                    }
+
+                    context.Renderers.Add(renderer);
+                    context.SubMeshCount += sharedMesh.subMeshCount;
+                    context.VertexCount += sharedMesh.vertexCount;
+
+                    Material[] rendererMaterials = renderer.sharedMaterials;
+                    for (int i = 0; i < sharedMesh.subMeshCount; i++)
+                    {
+                        Material material = rendererMaterials != null && rendererMaterials.Length > 0
+                            ? rendererMaterials[Mathf.Min(i, rendererMaterials.Length - 1)]
+                            : null;
+                        context.AddMaterial(material);
+                    }
+                }
+            }
+
+            if (context.Renderers.Count == 0)
+            {
+                message = skippedForUv
+                    ? "Todos los MeshRenderers seleccionados fueron omitidos porque no tienen UVs en el canal principal."
+                    : "No se encontraron MeshRenderers válidos en la selección.";
+                messageType = MessageType.Warning;
+                return null;
+            }
+
+            context.FinalizeData();
+            return context;
         }
 
         private static bool HasMultipleMaterials(Material[] materials)
@@ -175,22 +323,72 @@ namespace JaimeCamachoDev.Multitool.Modeling
             return false;
         }
 
-        private static void ConvertSelection(MeshRenderer renderer, MeshFilter filter, Mesh mesh, Material[] materials)
+        private static void ConvertSelection(SelectionContext context)
         {
+            if (context == null)
+            {
+                return;
+            }
+
+            MeshRenderer renderer = context.TargetRenderer;
+            MeshFilter filter = context.TargetFilter;
+
+            Mesh workingMesh;
+            Material[] materials;
+            bool disposeWorkingMesh = false;
+
+            if (!context.RequiresTemporaryMesh)
+            {
+                workingMesh = filter.sharedMesh;
+                materials = renderer.sharedMaterials;
+            }
+            else
+            {
+                if (!TryBuildTemporaryMesh(context, out workingMesh, out materials))
+                {
+                    EditorUtility.DisplayDialog("Material Atlas", "No se pudo preparar la malla combinada de la selección.", "Entendido");
+                    return;
+                }
+                disposeWorkingMesh = true;
+            }
+
+            if (workingMesh == null)
+            {
+                EditorUtility.DisplayDialog("Material Atlas", "No se encontró una malla válida para procesar.", "Entendido");
+                if (disposeWorkingMesh && workingMesh != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(workingMesh);
+                }
+                return;
+            }
+
+            if (workingMesh.uv == null || workingMesh.uv.Length == 0)
+            {
+                EditorUtility.DisplayDialog("Material Atlas", "La malla no tiene coordenadas UV en el canal principal.", "Entendido");
+                if (disposeWorkingMesh && workingMesh != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(workingMesh);
+                }
+                return;
+            }
+
             List<Texture2D> tempGenerated = new List<Texture2D>();
             try
             {
                 EditorUtility.DisplayProgressBar("Material Atlas", "Preparando texturas...", 0.1f);
 
-                int subMeshCount = mesh.subMeshCount;
+                int subMeshCount = workingMesh.subMeshCount;
                 List<Texture2D> textureCopies = new List<Texture2D>(subMeshCount);
                 List<string> issues = new List<string>();
                 string baseAssetName = string.IsNullOrWhiteSpace(outputName) ? "CombinedAtlas" : outputName;
 
+                materials ??= Array.Empty<Material>();
+
                 for (int i = 0; i < subMeshCount; i++)
                 {
-                    int materialIndex = Mathf.Clamp(i, 0, materials.Length - 1);
-                    Texture2D texture = ExtractTexture(materials[materialIndex], out string note);
+                    int materialIndex = materials.Length > 0 ? Mathf.Clamp(i, 0, materials.Length - 1) : -1;
+                    Material currentMaterial = materialIndex >= 0 ? materials[materialIndex] : null;
+                    Texture2D texture = ExtractTexture(currentMaterial, out string note);
                     bool createdTexture = false;
                     if (!string.IsNullOrEmpty(note))
                     {
@@ -244,10 +442,14 @@ namespace JaimeCamachoDev.Multitool.Modeling
 
                 EditorUtility.DisplayProgressBar("Material Atlas", "Reasignando UVs...", 0.6f);
 
-                Mesh atlasMesh = rects.Length == subMeshCount ? BuildAtlasMesh(mesh, rects) : null;
+                Mesh atlasMesh = rects.Length == subMeshCount ? BuildAtlasMesh(workingMesh, rects) : null;
                 if (atlasMesh == null)
                 {
                     EditorUtility.DisplayDialog("Material Atlas", "No se pudo generar la malla con el nuevo atlas.", "Entendido");
+                    if (disposeWorkingMesh && workingMesh != null)
+                    {
+                        UnityEngine.Object.DestroyImmediate(workingMesh);
+                    }
                     return;
                 }
                 atlasMesh.name = baseAssetName + "_AtlasMesh";
@@ -281,8 +483,8 @@ namespace JaimeCamachoDev.Multitool.Modeling
                     SaveMeshAsset(atlasMesh, folderPath, baseAssetName);
                 }
 
-                Material sourceMaterial = materials[0];
-                Material atlasMaterial = sourceMaterial != null ? new Material(sourceMaterial) : new Material(Shader.Find("Standard"));
+                Material baseMaterial = materials.Length > 0 ? materials[0] : null;
+                Material atlasMaterial = baseMaterial != null ? new Material(baseMaterial) : new Material(Shader.Find("Standard"));
                 atlasMaterial.name = baseAssetName + "_Mat";
 
                 if (finalAtlas != null)
@@ -349,7 +551,150 @@ namespace JaimeCamachoDev.Multitool.Modeling
                     }
                 }
                 tempGenerated.Clear();
+
+                if (disposeWorkingMesh && workingMesh != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(workingMesh);
+                }
+
                 EditorUtility.ClearProgressBar();
+            }
+        }
+
+        private static bool TryBuildTemporaryMesh(SelectionContext context, out Mesh combinedMesh, out Material[] materials)
+        {
+            combinedMesh = null;
+            materials = Array.Empty<Material>();
+
+            if (context.Renderers.Count == 0)
+            {
+                return false;
+            }
+
+            List<CombineInstance> combineInstances = new List<CombineInstance>();
+            List<Material> materialList = new List<Material>();
+            Transform reference = context.TargetRenderer != null ? context.TargetRenderer.transform : context.Renderers[0].transform;
+            Matrix4x4 worldToLocal = reference.worldToLocalMatrix;
+            int totalVertices = 0;
+
+            foreach (MeshRenderer renderer in context.Renderers)
+            {
+                if (renderer == null)
+                {
+                    continue;
+                }
+
+                MeshFilter filter = renderer.GetComponent<MeshFilter>();
+                Mesh mesh = filter != null ? filter.sharedMesh : null;
+                if (mesh == null || mesh.subMeshCount == 0)
+                {
+                    continue;
+                }
+
+                totalVertices += mesh.vertexCount;
+                Matrix4x4 transformMatrix = worldToLocal * renderer.localToWorldMatrix;
+                Material[] rendererMaterials = renderer.sharedMaterials;
+
+                for (int i = 0; i < mesh.subMeshCount; i++)
+                {
+                    CombineInstance instance = new CombineInstance
+                    {
+                        mesh = mesh,
+                        subMeshIndex = i,
+                        transform = transformMatrix
+                    };
+                    combineInstances.Add(instance);
+
+                    Material material = rendererMaterials != null && rendererMaterials.Length > 0
+                        ? rendererMaterials[Mathf.Min(i, rendererMaterials.Length - 1)]
+                        : null;
+                    materialList.Add(material);
+                }
+            }
+
+            if (combineInstances.Count == 0)
+            {
+                return false;
+            }
+
+            combinedMesh = new Mesh
+            {
+                name = string.IsNullOrWhiteSpace(outputName) ? "CombinedSelection" : outputName + "_Selection"
+            };
+
+            if (totalVertices > 65535)
+            {
+                combinedMesh.indexFormat = IndexFormat.UInt32;
+            }
+
+            combinedMesh.CombineMeshes(combineInstances.ToArray(), false, true, false);
+            combinedMesh.RecalculateBounds();
+            materials = materialList.ToArray();
+            return true;
+        }
+
+        private class SelectionContext
+        {
+            private const int SampleCount = 5;
+            private readonly List<Material> materials = new List<Material>();
+
+            public SelectionContext(MeshRenderer targetRenderer, MeshFilter targetFilter)
+            {
+                TargetRenderer = targetRenderer;
+                TargetFilter = targetFilter;
+            }
+
+            public MeshRenderer TargetRenderer { get; }
+            public MeshFilter TargetFilter { get; }
+            public readonly List<MeshRenderer> Renderers = new List<MeshRenderer>();
+            public readonly List<string> Skipped = new List<string>();
+            public int SubMeshCount;
+            public int VertexCount;
+            public int UniqueMaterialCount { get; private set; }
+            public Material[] MaterialArray { get; private set; } = Array.Empty<Material>();
+            public bool RequiresTemporaryMesh { get; private set; }
+
+            public void AddMaterial(Material material)
+            {
+                materials.Add(material);
+            }
+
+            public List<string> GetRendererSamples()
+            {
+                List<string> names = new List<string>(Renderers.Count);
+                for (int i = 0; i < Renderers.Count; i++)
+                {
+                    MeshRenderer renderer = Renderers[i];
+                    if (renderer != null)
+                    {
+                        names.Add(renderer.name);
+                    }
+                }
+
+                names.Sort(StringComparer.Ordinal);
+                int limit = Mathf.Min(SampleCount, names.Count);
+                if (limit < names.Count)
+                {
+                    return names.GetRange(0, limit);
+                }
+
+                return names;
+            }
+
+            public void FinalizeData()
+            {
+                MaterialArray = materials.ToArray();
+                HashSet<Material> unique = new HashSet<Material>();
+                foreach (Material material in MaterialArray)
+                {
+                    if (material != null)
+                    {
+                        unique.Add(material);
+                    }
+                }
+
+                UniqueMaterialCount = unique.Count;
+                RequiresTemporaryMesh = Renderers.Count > 1 || (Renderers.Count == 1 && Renderers[0] != TargetRenderer);
             }
         }
 
