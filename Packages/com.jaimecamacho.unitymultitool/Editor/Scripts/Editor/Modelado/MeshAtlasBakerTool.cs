@@ -182,17 +182,19 @@ namespace JaimeCamachoDev.Multitool.Modeling
             {
                 EditorUtility.DisplayProgressBar("Material Atlas", "Preparando texturas...", 0.1f);
 
-                List<Texture2D> textureCopies = new List<Texture2D>(materials.Length);
+                int subMeshCount = mesh.subMeshCount;
+                List<Texture2D> textureCopies = new List<Texture2D>(subMeshCount);
                 List<string> issues = new List<string>();
                 string baseAssetName = string.IsNullOrWhiteSpace(outputName) ? "CombinedAtlas" : outputName;
 
-                for (int i = 0; i < materials.Length; i++)
+                for (int i = 0; i < subMeshCount; i++)
                 {
-                    Texture2D texture = ExtractTexture(materials[i], out string note);
+                    int materialIndex = Mathf.Clamp(i, 0, materials.Length - 1);
+                    Texture2D texture = ExtractTexture(materials[materialIndex], out string note);
                     bool createdTexture = false;
                     if (!string.IsNullOrEmpty(note))
                     {
-                        issues.Add(note);
+                        issues.Add($"Submesh {i + 1}: {note}");
                     }
 
                     if (texture == null)
@@ -242,7 +244,7 @@ namespace JaimeCamachoDev.Multitool.Modeling
 
                 EditorUtility.DisplayProgressBar("Material Atlas", "Reasignando UVs...", 0.6f);
 
-                Mesh atlasMesh = BuildAtlasMesh(mesh, rects);
+                Mesh atlasMesh = rects.Length == subMeshCount ? BuildAtlasMesh(mesh, rects) : null;
                 if (atlasMesh == null)
                 {
                     EditorUtility.DisplayDialog("Material Atlas", "No se pudo generar la malla con el nuevo atlas.", "Entendido");
@@ -436,6 +438,11 @@ namespace JaimeCamachoDev.Multitool.Modeling
                 return null;
             }
 
+            if (rects == null)
+            {
+                return null;
+            }
+
             Vector3[] vertices = sourceMesh.vertices;
             Vector3[] normals = sourceMesh.normals;
             Vector4[] tangents = sourceMesh.tangents;
@@ -469,7 +476,11 @@ namespace JaimeCamachoDev.Multitool.Modeling
             }
 
             List<int> triangles = new List<int>();
-            int submeshCount = Mathf.Min(sourceMesh.subMeshCount, rects.Count);
+            int submeshCount = sourceMesh.subMeshCount;
+            if (rects.Count < submeshCount)
+            {
+                return null;
+            }
             for (int submesh = 0; submesh < submeshCount; submesh++)
             {
                 Rect rect = rects[submesh];
