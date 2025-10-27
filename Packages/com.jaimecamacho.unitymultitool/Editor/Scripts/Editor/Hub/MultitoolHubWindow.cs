@@ -134,7 +134,7 @@ namespace JaimeCamachoDev.Multitool
 
             toolDescriptions["Advanced mesh combiner"] = "Combina múltiples objetos estáticos o skinned en un único mesh optimizado.";
             toolDescriptions["Pivot mover & aligner"] = "Ajusta el pivote de uno o varios objetos con presets o gizmo interactivo.";
-            toolDescriptions["Merge mesh and create atlas"] = "Combina mallas en una sola malla y optimiza sus materiales en un atlas (en desarrollo).";
+            toolDescriptions["Merge mesh and create atlas"] = "Combina mallas en una sola malla y optimiza sus materiales en un atlas listo para uso inmediato.";
             toolDescriptions["Remove not visible vertex"] = "Limpia vrtices ocultos para reducir el peso de tus modelos (en desarrollo).";
             toolDescriptions["Hollow shell"] = "Genera una versin hueca del mesh para props o elementos ligeros.";
             toolDescriptions["Multi material Finder"] = "Detecta rpidamente los materiales utilizados por una malla.";
@@ -188,6 +188,7 @@ namespace JaimeCamachoDev.Multitool
             toolDrawers["Hollow shell"] = HollowShellMeshTool.DrawTool;
             toolDrawers["Multi material Finder"] = MultiMaterialFinderTool.DrawTool;
             toolDrawers["Multi material splitter"] = MultimaterialMeshSplitterTool.DrawTool;
+            toolDrawers["Merge mesh and create atlas"] = MeshAtlasBakerTool.DrawTool;
             toolDrawers["Generate mesh uv lightmaps"] = UV2GeneratorTool.DrawTool;
             toolDrawers["Move UV inside grid"] = UVAdjusterToolOpti.DrawTool;
             toolDrawers["Vertex ID Display"] = VertexIDDisplayerTool.DrawTool;
