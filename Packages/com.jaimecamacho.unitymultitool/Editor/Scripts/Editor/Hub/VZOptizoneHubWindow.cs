@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using OptiZone;
 using Optizone;
 using VZ_Optizone;
+using JaimeCamachoDev.Multitool.Modeling;
 
 namespace VZOptizone
 {
@@ -25,7 +26,7 @@ namespace VZOptizone
 
         private void OnEnable()
         {
-            // Inicializar herramientas para cada sección
+            // Inicializar herramientas para cada secciÃ³n
             toolCategories.Add("IMAGE", new List<string> { "Convert Asset to Image", 
                 "Split texture into channels", 
                 "Merge textures into one",
@@ -85,7 +86,7 @@ namespace VZOptizone
                             DrawSceneToolsMenu();
                             break;
                         default:
-                            GUILayout.Label("Selecciona una herramienta en el menú de la izquierda.");
+                            GUILayout.Label("Selecciona una herramienta en el menÃº de la izquierda.");
                             break;
                     }
                 }
@@ -121,7 +122,7 @@ namespace VZOptizone
                 if (GUILayout.Button(sections[i]))
                 {
                     currentSection = i;
-                    toolActive = false; // Resetear la herramienta activa al cambiar de sección
+                    toolActive = false; // Resetear la herramienta activa al cambiar de secciÃ³n
                 }
             }
 
@@ -132,7 +133,7 @@ namespace VZOptizone
             GUILayout.Label("Welcome to VZ Optizone", new GUIStyle(GUI.skin.label) { fontSize = 18, fontStyle = FontStyle.Bold });
             GUILayout.Space(10);
 
-            // Ajustar texto según el tamaño de la ventana
+            // Ajustar texto segÃºn el tamaÃ±o de la ventana
             GUILayout.Label("VZ Optizone is a multi-functional tool hub designed to streamline and optimize your workflow within Unity. " +
                             "It includes a range of utilities for tasks such as image processing, 3D model optimization, animation handling, " +
                             "and scene management, allowing you to quickly perform common operations with ease.",
@@ -265,7 +266,7 @@ namespace VZOptizone
                     AnimationTerminatorTool.DrawTool();
                     break;
                 case "Merge mesh and create atlas":
-                    //MeshCombinerAndAtlasTool.DrawTool();
+                    MeshAtlasBakerTool.DrawTool();
                     break;
                 case "Lightmap checker":
                     LightmapCheckerTool.DrawTool();
@@ -326,7 +327,7 @@ namespace VZOptizone
                     break;
 
 
-                    // Añadir casos para otras herramientas
+                    // AÃ±adir casos para otras herramientas
             }
         }
     }
