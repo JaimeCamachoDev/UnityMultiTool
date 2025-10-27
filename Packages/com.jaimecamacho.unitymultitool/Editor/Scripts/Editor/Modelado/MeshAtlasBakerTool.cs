@@ -130,13 +130,49 @@ namespace JaimeCamachoDev.Multitool.Modeling
 
             GUILayout.Space(10f);
 
-            using (new EditorGUI.DisabledScope(materials.Length <= 1))
+            bool canGenerateAtlas = HasMultipleMaterials(materials) || mesh.subMeshCount > 1;
+
+            if (!canGenerateAtlas)
+            {
+                EditorGUILayout.HelpBox("Se requieren al menos dos materiales o submeshes para generar el atlas.", MessageType.Info);
+            }
+
+            using (new EditorGUI.DisabledScope(!canGenerateAtlas))
             {
                 if (GUILayout.Button("Generar atlas y material único"))
                 {
                     ConvertSelection(renderer, filter, mesh, materials);
                 }
             }
+        }
+
+        private static bool HasMultipleMaterials(Material[] materials)
+        {
+            if (materials == null || materials.Length == 0)
+            {
+                return false;
+            }
+
+            int uniqueCount = 0;
+            HashSet<Material> uniqueMaterials = new HashSet<Material>();
+            foreach (Material material in materials)
+            {
+                if (material == null)
+                {
+                    continue;
+                }
+
+                if (uniqueMaterials.Add(material))
+                {
+                    uniqueCount++;
+                    if (uniqueCount > 1)
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
         }
 
         private static void ConvertSelection(MeshRenderer renderer, MeshFilter filter, Mesh mesh, Material[] materials)
