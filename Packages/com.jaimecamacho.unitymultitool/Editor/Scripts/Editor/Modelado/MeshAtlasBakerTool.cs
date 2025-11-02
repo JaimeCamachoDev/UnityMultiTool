@@ -1041,6 +1041,20 @@ namespace JaimeCamachoDev.Multitool.Modeling
             return true;
         }
 
+        private class CustomUvPreviewEntry
+        {
+            public string DisplayName;
+            public Vector2[] Uvs;
+            public int[] Triangles;
+            public Color FillColor;
+            public Color OutlineColor;
+
+            public bool IsValidIndex(int index)
+            {
+                return Uvs != null && index >= 0 && index < Uvs.Length;
+            }
+        }
+
         private class SelectionContext
         {
             private const int SampleCount = 5;
