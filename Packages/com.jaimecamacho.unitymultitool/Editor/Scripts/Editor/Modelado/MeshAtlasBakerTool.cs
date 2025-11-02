@@ -368,10 +368,6 @@ namespace JaimeCamachoDev.Multitool.Modeling
                 DrawCustomUvPreview(previewRect);
             }
 
-                DrawCustomUvPreviewGrid(previewRect);
-                DrawCustomUvPreview(previewRect);
-            }
-
             EditorGUILayout.HelpBox("Ajusta cada elemento de forma individual y utiliza \"Aplicar UV a la malla\" para guardar los cambios, replicando el flujo de trabajo de VAT UV Visual.", MessageType.None);
 
             using (new EditorGUILayout.HorizontalScope())
