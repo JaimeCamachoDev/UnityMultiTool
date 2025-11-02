@@ -30,9 +30,6 @@ namespace JaimeCamachoDev.Multitool.Modeling
         private static int customAtlasCellResolution = 1024;
         private static Texture2D customGeneratedAtlas;
         private static Texture2D customAtlasTexture;
-        private static Vector2 customUvPosition = Vector2.zero;
-        private static Vector2 customUvScale = Vector2.one;
-        private static float customUvRotation = 0f;
         private static bool customLockUniformScale = true;
         private static bool customUvPreviewIsDragging;
         private static Vector2 customUvPreviewDragStartMouse;
@@ -371,13 +368,32 @@ namespace JaimeCamachoDev.Multitool.Modeling
                 DrawCustomUvPreview(previewRect);
             }
 
-            EditorGUILayout.HelpBox("La transformación se aplicará a la malla combinada antes de guardar el atlas, permitiendo alinear UV de forma similar a la herramienta VAT UV Visual.", MessageType.None);
+                DrawCustomUvPreviewGrid(previewRect);
+                DrawCustomUvPreview(previewRect);
+            }
+
+            EditorGUILayout.HelpBox("Ajusta cada elemento de forma individual y utiliza \"Aplicar UV a la malla\" para guardar los cambios, replicando el flujo de trabajo de VAT UV Visual.", MessageType.None);
 
             using (new EditorGUILayout.HorizontalScope())
             {
-                if (GUILayout.Button("Restablecer transformaciones"))
+                using (new EditorGUI.DisabledScope(activeEntry == null))
                 {
-                    ResetCustomUvTransform();
+                    if (GUILayout.Button("Aplicar UV a la malla"))
+                    {
+                        ApplyActiveCustomUvTransform();
+                    }
+
+                    if (GUILayout.Button("Restaurar UV originales"))
+                    {
+                        RestoreActiveCustomUvToOriginal();
+                    }
+                }
+
+                GUILayout.FlexibleSpace();
+
+                if (GUILayout.Button("Restablecer gizmo"))
+                {
+                    ResetActiveCustomUvTransform();
                 }
 
                 if (GUILayout.Button("Limpiar mensaje"))
@@ -976,12 +992,19 @@ namespace JaimeCamachoDev.Multitool.Modeling
                 return;
             }
 
-            Vector2[] transformed = new Vector2[uv.Length];
-            Matrix4x4 transformMatrix = Matrix4x4.TRS(customUvPosition, Quaternion.Euler(0f, 0f, customUvRotation), new Vector3(customUvScale.x, customUvScale.y, 1f));
-
-            for (int i = 0; i < uv.Length; i++)
+            CustomUvPreviewEntry activeEntry = GetActiveCustomUvPreviewEntry();
+            if (activeEntry == null || activeEntry.Uvs == null || activeEntry.Uvs.Length != uv.Length)
             {
-                Vector3 uvPoint = new Vector3(uv[i].x, uv[i].y, 0f);
+                return;
+            }
+
+            Matrix4x4 transformMatrix = Matrix4x4.TRS(activeEntry.TransformPosition, Quaternion.Euler(0f, 0f, activeEntry.TransformRotation), new Vector3(activeEntry.TransformScale.x, activeEntry.TransformScale.y, 1f));
+            Vector2[] baseUvs = activeEntry.Uvs;
+            Vector2[] transformed = new Vector2[baseUvs.Length];
+
+            for (int i = 0; i < baseUvs.Length; i++)
+            {
+                Vector3 uvPoint = new Vector3(baseUvs[i].x, baseUvs[i].y, 0f);
                 Vector3 result = transformMatrix.MultiplyPoint3x4(uvPoint);
                 transformed[i] = new Vector2(result.x, result.y);
             }
@@ -1455,7 +1478,11 @@ namespace JaimeCamachoDev.Multitool.Modeling
         private class CustomUvPreviewEntry
         {
             public string DisplayName;
+            public MeshRenderer Renderer;
+            public MeshFilter Filter;
+            public Mesh Mesh;
             public Vector2[] Uvs;
+            public Vector2[] InitialUvs;
             public int[] Triangles;
             public Color FillColor;
             public Color OutlineColor;
