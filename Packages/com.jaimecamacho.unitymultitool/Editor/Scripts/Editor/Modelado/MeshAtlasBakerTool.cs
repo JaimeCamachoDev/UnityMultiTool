@@ -34,6 +34,23 @@ namespace JaimeCamachoDev.Multitool.Modeling
         private static Vector2 customUvScale = Vector2.one;
         private static float customUvRotation = 0f;
         private static bool customLockUniformScale = true;
+        private static bool customUvPreviewIsDragging;
+        private static Vector2 customUvPreviewDragStartMouse;
+        private static Vector2 customUvPreviewDragStartPosition;
+        private static readonly Color[] customUvPreviewPalette =
+        {
+            new Color(0.00f, 0.78f, 1.00f),
+            new Color(1.00f, 0.55f, 0.35f),
+            new Color(0.40f, 0.90f, 0.35f),
+            new Color(0.90f, 0.30f, 0.80f),
+            new Color(1.00f, 0.85f, 0.30f),
+            new Color(0.55f, 0.60f, 1.00f),
+            new Color(0.35f, 0.85f, 0.75f),
+            new Color(0.95f, 0.45f, 0.65f)
+        };
+        private static readonly List<CustomUvPreviewEntry> customUvPreviewEntries = new List<CustomUvPreviewEntry>();
+        private static int customUvPreviewActiveIndex = -1;
+        private static Vector2 customUvPreviewListScroll;
         private static string customStatusMessage = string.Empty;
         private static MessageType customStatusType = MessageType.Info;
 
@@ -186,7 +203,7 @@ namespace JaimeCamachoDev.Multitool.Modeling
                 }
             }
 
-            DrawCustomAtlasWorkflowControls();
+            DrawCustomAtlasWorkflowControls(context);
 
             if (!saveAtlasTexture)
             {
@@ -211,7 +228,7 @@ namespace JaimeCamachoDev.Multitool.Modeling
             }
         }
 
-        private static void DrawCustomAtlasWorkflowControls()
+        private static void DrawCustomAtlasWorkflowControls(SelectionContext context)
         {
             GUILayout.Space(8f);
             EditorGUILayout.LabelField("Flujo manual de atlas (VAT UV Visual)", EditorStyles.boldLabel);
@@ -222,6 +239,7 @@ namespace JaimeCamachoDev.Multitool.Modeling
                 if (!useCustomAtlasWorkflow)
                 {
                     ClearCustomStatus();
+                    ClearCustomUvPreview();
                 }
             }
 
@@ -234,6 +252,8 @@ namespace JaimeCamachoDev.Multitool.Modeling
             {
                 EditorGUILayout.HelpBox(customStatusMessage, customStatusType);
             }
+
+            UpdateCustomUvPreviewEntries(context);
 
             showCustomAtlasBuilder = EditorGUILayout.BeginFoldoutHeaderGroup(showCustomAtlasBuilder, "Atlas personalizado");
             if (showCustomAtlasBuilder)
@@ -300,30 +320,56 @@ namespace JaimeCamachoDev.Multitool.Modeling
             GUILayout.Space(6f);
             EditorGUILayout.LabelField("Transformación UV", EditorStyles.boldLabel);
 
-            customUvPosition = EditorGUILayout.Vector2Field("Posición", customUvPosition);
+            bool hasPreviewData = HasValidCustomPreviewData();
 
-            EditorGUILayout.BeginHorizontal();
-            Vector2 newScale = EditorGUILayout.Vector2Field("Escala", customUvScale);
-            bool newLock = GUILayout.Toggle(customLockUniformScale, new GUIContent("Uniforme"), "Button", GUILayout.Width(90f));
-            if (!customLockUniformScale && newLock)
+            using (new EditorGUI.DisabledScope(!hasPreviewData))
             {
-                float uniform = Mathf.Max(0.01f, (newScale.x + newScale.y) * 0.5f);
-                newScale = new Vector2(uniform, uniform);
+                customUvPosition = EditorGUILayout.Vector2Field("Posición", customUvPosition);
+
+                EditorGUILayout.BeginHorizontal();
+                Vector2 newScale = EditorGUILayout.Vector2Field("Escala", customUvScale);
+                bool newLock = GUILayout.Toggle(customLockUniformScale, new GUIContent("Uniforme"), "Button", GUILayout.Width(90f));
+                if (!customLockUniformScale && newLock)
+                {
+                    float uniform = Mathf.Max(0.01f, (newScale.x + newScale.y) * 0.5f);
+                    newScale = new Vector2(uniform, uniform);
+                }
+                if (newLock)
+                {
+                    float uniform = Mathf.Max(0.01f, newScale.x);
+                    newScale = new Vector2(uniform, uniform);
+                }
+                EditorGUILayout.EndHorizontal();
+
+                newScale.x = Mathf.Clamp(newScale.x, 0.01f, 100f);
+                newScale.y = Mathf.Clamp(newScale.y, 0.01f, 100f);
+
+                customUvScale = newScale;
+                customLockUniformScale = newLock;
+
+                customUvRotation = EditorGUILayout.Slider("Rotación", customUvRotation, -360f, 360f);
             }
-            if (newLock)
+
+            if (!hasPreviewData)
             {
-                float uniform = Mathf.Max(0.01f, newScale.x);
-                newScale = new Vector2(uniform, uniform);
+                EditorGUILayout.HelpBox("Selecciona MeshRenderers con UV válidos para visualizar y editar la transformación.", MessageType.Info);
             }
-            EditorGUILayout.EndHorizontal();
 
-            newScale.x = Mathf.Clamp(newScale.x, 0.01f, 100f);
-            newScale.y = Mathf.Clamp(newScale.y, 0.01f, 100f);
+            DrawCustomUvPreviewLegend();
 
-            customUvScale = newScale;
-            customLockUniformScale = newLock;
+            if (hasPreviewData)
+            {
+                Rect previewRect = GUILayoutUtility.GetAspectRect(1f, GUILayout.ExpandWidth(true), GUILayout.MaxHeight(400f));
+                DrawCustomUvPreviewBackground(previewRect);
 
-            customUvRotation = EditorGUILayout.Slider("Rotación", customUvRotation, -360f, 360f);
+                if (customAtlasTexture != null && Event.current.type == EventType.Repaint)
+                {
+                    GUI.DrawTexture(previewRect, customAtlasTexture, ScaleMode.ScaleToFit);
+                }
+
+                DrawCustomUvPreviewGrid(previewRect);
+                DrawCustomUvPreview(previewRect);
+            }
 
             EditorGUILayout.HelpBox("La transformación se aplicará a la malla combinada antes de guardar el atlas, permitiendo alinear UV de forma similar a la herramienta VAT UV Visual.", MessageType.None);
 
@@ -480,6 +526,7 @@ namespace JaimeCamachoDev.Multitool.Modeling
             customUvPosition = Vector2.zero;
             customUvScale = Vector2.one;
             customUvRotation = 0f;
+            customUvPreviewIsDragging = false;
         }
 
         private static void SetCustomStatus(string message, MessageType type)
@@ -550,6 +597,370 @@ namespace JaimeCamachoDev.Multitool.Modeling
             atlasMesh = duplicatedMesh;
             atlasTexture = atlasCopy;
             return true;
+        }
+
+        private static void UpdateCustomUvPreviewEntries(SelectionContext context)
+        {
+            if (context == null)
+            {
+                ClearCustomUvPreview();
+                return;
+            }
+
+            customUvPreviewEntries.Clear();
+
+            int colorIndex = 0;
+            foreach (MeshRenderer renderer in context.Renderers)
+            {
+                if (renderer == null)
+                {
+                    continue;
+                }
+
+                MeshFilter filter = renderer.GetComponent<MeshFilter>();
+                Mesh mesh = filter != null ? filter.sharedMesh : null;
+                if (mesh == null)
+                {
+                    continue;
+                }
+
+                Vector2[] uv = mesh.uv;
+                int[] triangles = mesh.triangles;
+                if (uv == null || uv.Length == 0 || triangles == null || triangles.Length == 0)
+                {
+                    continue;
+                }
+
+                Color baseColor = GetCustomUvPreviewColor(colorIndex++);
+                CustomUvPreviewEntry entry = new CustomUvPreviewEntry
+                {
+                    DisplayName = renderer.name,
+                    Uvs = (Vector2[])uv.Clone(),
+                    Triangles = (int[])triangles.Clone(),
+                    FillColor = new Color(baseColor.r, baseColor.g, baseColor.b, 0.22f),
+                    OutlineColor = Color.Lerp(baseColor, Color.white, 0.2f),
+                    Visible = true
+                };
+                customUvPreviewEntries.Add(entry);
+            }
+
+            if (customUvPreviewEntries.Count == 0)
+            {
+                customUvPreviewActiveIndex = -1;
+                return;
+            }
+
+            if (customUvPreviewActiveIndex < 0 || customUvPreviewActiveIndex >= customUvPreviewEntries.Count)
+            {
+                customUvPreviewActiveIndex = 0;
+            }
+        }
+
+        private static bool HasValidCustomPreviewData()
+        {
+            for (int i = 0; i < customUvPreviewEntries.Count; i++)
+            {
+                CustomUvPreviewEntry entry = customUvPreviewEntries[i];
+                if (entry != null && entry.Visible && entry.Uvs != null && entry.Uvs.Length > 0 && entry.Triangles != null && entry.Triangles.Length >= 3)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static void DrawCustomUvPreviewLegend()
+        {
+            if (customUvPreviewEntries.Count == 0)
+            {
+                return;
+            }
+
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField("Objetos en vista previa", EditorStyles.boldLabel);
+            customUvPreviewListScroll = EditorGUILayout.BeginScrollView(customUvPreviewListScroll, GUILayout.MaxHeight(140f));
+
+            for (int i = 0; i < customUvPreviewEntries.Count; i++)
+            {
+                CustomUvPreviewEntry entry = customUvPreviewEntries[i];
+                if (entry == null)
+                {
+                    continue;
+                }
+
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    bool newVisible = EditorGUILayout.Toggle(entry.Visible, GUILayout.Width(20f));
+                    if (newVisible != entry.Visible)
+                    {
+                        entry.Visible = newVisible;
+                    }
+
+                    Rect colorRect = GUILayoutUtility.GetRect(18f, 18f, GUILayout.Width(18f), GUILayout.Height(18f));
+                    EditorGUI.DrawRect(colorRect, entry.OutlineColor);
+                    GUILayout.Space(4f);
+
+                    GUIStyle labelStyle = i == customUvPreviewActiveIndex ? EditorStyles.boldLabel : EditorStyles.label;
+                    string label = string.IsNullOrEmpty(entry.DisplayName) ? $"Malla {i + 1}" : entry.DisplayName;
+                    if (GUILayout.Button(label, labelStyle, GUILayout.Height(18f)))
+                    {
+                        customUvPreviewActiveIndex = customUvPreviewActiveIndex == i ? -1 : i;
+                        GUI.FocusControl(null);
+                    }
+                }
+            }
+
+            EditorGUILayout.EndScrollView();
+        }
+
+        private static void DrawCustomUvPreviewBackground(Rect rect)
+        {
+            if (Event.current.type != EventType.Repaint)
+            {
+                return;
+            }
+
+            Color baseColor = EditorGUIUtility.isProSkin ? new Color(0.13f, 0.13f, 0.13f, 1f) : new Color(0.95f, 0.95f, 0.95f, 1f);
+            EditorGUI.DrawRect(rect, baseColor);
+
+            Color border = new Color(0.25f, 0.6f, 1f, 0.85f);
+            EditorGUI.DrawRect(new Rect(rect.x, rect.y, rect.width, 2f), border);
+            EditorGUI.DrawRect(new Rect(rect.x, rect.yMax - 2f, rect.width, 2f), border);
+            EditorGUI.DrawRect(new Rect(rect.x, rect.y, 2f, rect.height), border);
+            EditorGUI.DrawRect(new Rect(rect.xMax - 2f, rect.y, 2f, rect.height), border);
+        }
+
+        private static void DrawCustomUvPreviewGrid(Rect rect)
+        {
+            if (Event.current.type != EventType.Repaint)
+            {
+                return;
+            }
+
+            Handles.BeginGUI();
+            Color previous = Handles.color;
+            Handles.color = new Color(1f, 1f, 1f, 0.08f);
+
+            const int lines = 8;
+            for (int i = 1; i < lines; i++)
+            {
+                float t = rect.x + rect.width * (i / (float)lines);
+                Handles.DrawLine(new Vector3(t, rect.y), new Vector3(t, rect.yMax));
+
+                float y = rect.y + rect.height * (i / (float)lines);
+                Handles.DrawLine(new Vector3(rect.x, y), new Vector3(rect.xMax, y));
+            }
+
+            Handles.color = previous;
+            Handles.EndGUI();
+        }
+
+        private static void DrawCustomUvPreview(Rect rect)
+        {
+            if (!HasValidCustomPreviewData())
+            {
+                return;
+            }
+
+            Matrix4x4 previewMatrix = Matrix4x4.TRS(customUvPosition, Quaternion.Euler(0f, 0f, customUvRotation), new Vector3(customUvScale.x, customUvScale.y, 1f));
+
+            HandleCustomUvPreviewInput(rect, previewMatrix);
+
+            if (Event.current.type != EventType.Repaint)
+            {
+                return;
+            }
+
+            Handles.BeginGUI();
+            Color previous = Handles.color;
+
+            for (int i = 0; i < customUvPreviewEntries.Count; i++)
+            {
+                CustomUvPreviewEntry entry = customUvPreviewEntries[i];
+                if (entry == null || !entry.Visible || entry.Uvs == null || entry.Triangles == null || entry.Triangles.Length < 3)
+                {
+                    continue;
+                }
+
+                Color fill = entry.FillColor;
+                Color outline = entry.OutlineColor;
+
+                if (customUvPreviewActiveIndex >= 0 && customUvPreviewActiveIndex != i)
+                {
+                    fill.a *= 0.35f;
+                    outline = Color.Lerp(outline, new Color(0.35f, 0.35f, 0.35f, outline.a), 0.6f);
+                }
+
+                Handles.color = fill;
+
+                for (int tri = 0; tri < entry.Triangles.Length; tri += 3)
+                {
+                    int idxA = entry.Triangles[tri];
+                    int idxB = entry.Triangles[tri + 1];
+                    int idxC = entry.Triangles[tri + 2];
+
+                    if (!entry.IsValidIndex(idxA) || !entry.IsValidIndex(idxB) || !entry.IsValidIndex(idxC))
+                    {
+                        continue;
+                    }
+
+                    Vector2 uvA = entry.Uvs[idxA];
+                    Vector2 uvB = entry.Uvs[idxB];
+                    Vector2 uvC = entry.Uvs[idxC];
+
+                    Vector3 transformedA = previewMatrix.MultiplyPoint3x4(new Vector3(uvA.x, uvA.y, 0f));
+                    Vector3 transformedB = previewMatrix.MultiplyPoint3x4(new Vector3(uvB.x, uvB.y, 0f));
+                    Vector3 transformedC = previewMatrix.MultiplyPoint3x4(new Vector3(uvC.x, uvC.y, 0f));
+
+                    Vector2 a = CustomUvToScreen(new Vector2(transformedA.x, transformedA.y), rect);
+                    Vector2 b = CustomUvToScreen(new Vector2(transformedB.x, transformedB.y), rect);
+                    Vector2 c = CustomUvToScreen(new Vector2(transformedC.x, transformedC.y), rect);
+
+                    Handles.DrawAAConvexPolygon(a, b, c);
+                    Handles.color = outline;
+                    Handles.DrawAAPolyLine(2f, a, b, c, a);
+                    Handles.color = fill;
+                }
+            }
+
+            Vector3 pivot = previewMatrix.MultiplyPoint3x4(Vector3.zero);
+            Vector3 axisX = previewMatrix.MultiplyPoint3x4(new Vector3(0.2f, 0f, 0f));
+            Vector3 axisY = previewMatrix.MultiplyPoint3x4(new Vector3(0f, 0.2f, 0f));
+
+            Vector2 pivotScreen = CustomUvToScreen(new Vector2(pivot.x, pivot.y), rect);
+            Vector2 axisXScreen = CustomUvToScreen(new Vector2(axisX.x, axisX.y), rect);
+            Vector2 axisYScreen = CustomUvToScreen(new Vector2(axisY.x, axisY.y), rect);
+
+            Handles.color = new Color(1f, 0.35f, 0.35f, 0.9f);
+            Handles.DrawAAPolyLine(3f, pivotScreen, axisXScreen);
+            Handles.color = new Color(0.35f, 1f, 0.5f, 0.9f);
+            Handles.DrawAAPolyLine(3f, pivotScreen, axisYScreen);
+
+            Handles.color = previous;
+            Handles.EndGUI();
+        }
+
+        private static void HandleCustomUvPreviewInput(Rect rect, Matrix4x4 previewMatrix)
+        {
+            Event e = Event.current;
+            if (e == null)
+            {
+                return;
+            }
+
+            Vector2 mouseUv = CustomScreenToUv(e.mousePosition, rect);
+
+            switch (e.type)
+            {
+                case EventType.MouseDown:
+                    if (e.button == 0 && rect.Contains(e.mousePosition) && IsMouseNearAnyCustomUv(mouseUv, previewMatrix))
+                    {
+                        customUvPreviewIsDragging = true;
+                        customUvPreviewDragStartMouse = e.mousePosition;
+                        customUvPreviewDragStartPosition = customUvPosition;
+                        GUI.FocusControl(null);
+                        e.Use();
+                    }
+                    break;
+                case EventType.MouseDrag:
+                    if (customUvPreviewIsDragging)
+                    {
+                        Vector2 deltaPixels = e.mousePosition - customUvPreviewDragStartMouse;
+                        Vector2 deltaUv = new Vector2(deltaPixels.x / rect.width, -deltaPixels.y / rect.height);
+                        customUvPosition = customUvPreviewDragStartPosition + deltaUv;
+                        e.Use();
+                    }
+                    break;
+                case EventType.MouseUp:
+                    if (customUvPreviewIsDragging && e.button == 0)
+                    {
+                        customUvPreviewIsDragging = false;
+                        e.Use();
+                    }
+                    break;
+                case EventType.ScrollWheel:
+                    if (customUvPreviewIsDragging && rect.Contains(e.mousePosition))
+                    {
+                        float scroll = -e.delta.y;
+                        float scaleFactor = 1f + (scroll * 0.05f);
+
+                        if (customLockUniformScale)
+                        {
+                            customUvScale *= scaleFactor;
+                        }
+                        else
+                        {
+                            customUvScale.x *= scaleFactor;
+                            customUvScale.y *= scaleFactor;
+                        }
+
+                        customUvScale.x = Mathf.Clamp(customUvScale.x, 0.01f, 100f);
+                        customUvScale.y = Mathf.Clamp(customUvScale.y, 0.01f, 100f);
+
+                        e.Use();
+                    }
+                    break;
+            }
+        }
+
+        private static bool IsMouseNearAnyCustomUv(Vector2 mouseUv, Matrix4x4 previewMatrix)
+        {
+            const float threshold = 0.05f;
+
+            for (int i = 0; i < customUvPreviewEntries.Count; i++)
+            {
+                CustomUvPreviewEntry entry = customUvPreviewEntries[i];
+                if (entry == null || !entry.Visible || entry.Uvs == null)
+                {
+                    continue;
+                }
+
+                for (int j = 0; j < entry.Uvs.Length; j++)
+                {
+                    Vector2 uv = entry.Uvs[j];
+                    Vector3 transformed = previewMatrix.MultiplyPoint3x4(new Vector3(uv.x, uv.y, 0f));
+                    Vector2 transformed2D = new Vector2(transformed.x, transformed.y);
+                    if (Vector2.Distance(transformed2D, mouseUv) < threshold)
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        private static Vector2 CustomUvToScreen(Vector2 uv, Rect rect)
+        {
+            float x = rect.x + (uv.x * rect.width);
+            float y = rect.y + ((1f - uv.y) * rect.height);
+            return new Vector2(x, y);
+        }
+
+        private static Vector2 CustomScreenToUv(Vector2 screen, Rect rect)
+        {
+            float u = Mathf.InverseLerp(rect.x, rect.xMax, screen.x);
+            float v = 1f - Mathf.InverseLerp(rect.y, rect.yMax, screen.y);
+            return new Vector2(u, v);
+        }
+
+        private static Color GetCustomUvPreviewColor(int index)
+        {
+            if (customUvPreviewPalette == null || customUvPreviewPalette.Length == 0)
+            {
+                return Color.cyan;
+            }
+
+            return customUvPreviewPalette[index % customUvPreviewPalette.Length];
+        }
+
+        private static void ClearCustomUvPreview()
+        {
+            customUvPreviewEntries.Clear();
+            customUvPreviewActiveIndex = -1;
+            customUvPreviewIsDragging = false;
+            customUvPreviewListScroll = Vector2.zero;
         }
 
         private static void ApplyCustomUvTransform(Mesh mesh)
@@ -1048,6 +1459,7 @@ namespace JaimeCamachoDev.Multitool.Modeling
             public int[] Triangles;
             public Color FillColor;
             public Color OutlineColor;
+            public bool Visible = true;
 
             public bool IsValidIndex(int index)
             {
