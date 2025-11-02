@@ -1201,7 +1201,10 @@ namespace JaimeCamachoDev.Multitool.Modeling
                 Texture2D atlasTexture = null;
                 Mesh atlasMesh = null;
 
-                materials ??= Array.Empty<Material>();
+                if (materials == null)
+                {
+                    materials = Array.Empty<Material>();
+                }
 
                 if (useCustomAtlasWorkflow)
                 {
@@ -1670,10 +1673,10 @@ namespace JaimeCamachoDev.Multitool.Modeling
             }
 
             List<Vector3> newVertices = new List<Vector3>();
-            List<Vector3> newNormals = normals is { Length: > 0 } ? new List<Vector3>() : null;
-            List<Vector4> newTangents = tangents is { Length: > 0 } ? new List<Vector4>() : null;
-            List<Color> newColors = colors is { Length: > 0 } ? new List<Color>() : null;
-            List<Color32> newColors32 = colors32 is { Length: > 0 } ? new List<Color32>() : null;
+            List<Vector3> newNormals = normals != null && normals.Length > 0 ? new List<Vector3>() : null;
+            List<Vector4> newTangents = tangents != null && tangents.Length > 0 ? new List<Vector4>() : null;
+            List<Color> newColors = colors != null && colors.Length > 0 ? new List<Color>() : null;
+            List<Color32> newColors32 = colors32 != null && colors32.Length > 0 ? new List<Color32>() : null;
             List<Vector2> newUV = new List<Vector2>();
             List<List<Vector4>> newUVChannels = new List<List<Vector4>>(uvChannels.Count);
             foreach (List<Vector4> channel in uvChannels)
