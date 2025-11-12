@@ -50,7 +50,7 @@ namespace JaimeCamachoDev.Multitool
 
         private Texture2D selectedCategoryBackground;
 
-        [MenuItem("JaimeCamachoDev/Multitool/Open Hub")]
+        [MenuItem("Tools/JaimeCamachoDev/Multitool/Open Hub")]
         public static void ShowWindow()
         {
             MultitoolHubWindow window = GetWindow<MultitoolHubWindow>("Multitool");
@@ -91,7 +91,8 @@ namespace JaimeCamachoDev.Multitool
                 "Multi material Finder",
                 "Multi material splitter",
                 "Vertex ID Display",
-                "Micro triangle detector"
+                "Micro triangle detector",
+                "Reset XForm"
             };
 
             categoryTools[Category.Animacion] = new List<string>
@@ -141,6 +142,7 @@ namespace JaimeCamachoDev.Multitool
             toolDescriptions["Multi material splitter"] = "Separa una malla segn los materiales asignados.";
             toolDescriptions["Vertex ID Display"] = "Visualiza IDs de vrtice directamente en la escena para depurar.";
             toolDescriptions["Micro triangle detector"] = "Resalta los triángulos problemáticos que pueden generar artefactos.";
+            toolDescriptions["Reset XForm"] = "Convierte la transformación actual en geometría para dejar el Transform en valores por defecto sin mover el objeto.";
 
             toolDescriptions["Remove blendshapes"] = "Elimina blendshapes innecesarios para aligerar tus modelos animados.";
             toolDescriptions["Animation terminator"] = "Recorta clips de animacin hasta un frame especfico.";
@@ -195,6 +197,7 @@ namespace JaimeCamachoDev.Multitool
             toolDrawers["Micro triangle detector"] = MicroTrianglesDetectorTool.DrawTool;
             toolDrawers["Advanced mesh combiner"] = MeshCombinerTool.DrawTool;
             toolDrawers["Pivot mover & aligner"] = PivotAdjusterTool.DrawTool;
+            toolDrawers["Reset XForm"] = ResetTransformTool.DrawTool;
             toolDrawers["Recalculate Mesh Bounds"] = () =>
             {
                 if (Selection.activeGameObject != null)
