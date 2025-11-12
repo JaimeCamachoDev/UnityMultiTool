@@ -1,5 +1,9 @@
 {
   "name": "com.jaimecamacho.unitymultitool.Editor",
-  "references": ["com.jaimecamacho.unitymultitool.Runtime"],
+  "references": [
+    "com.jaimecamacho.unitymultitool.Runtime",
+    "Unity.EditorCoroutines.Editor",
+    "Unity.Formats.Alembic.Runtime"
+  ],
   "includePlatforms": ["Editor"]
 }

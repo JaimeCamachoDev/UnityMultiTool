@@ -7,6 +7,7 @@ using OptiZone;
 using Optizone;
 using VZ_Optizone;
 using VZOptizone;
+using JaimeCamachoDev.Multitool.Animation;
 using JaimeCamachoDev.Multitool.Modeling;
 
 namespace JaimeCamachoDev.Multitool
@@ -102,6 +103,7 @@ namespace JaimeCamachoDev.Multitool
                 "Bake pose",
                 "Combine animations/ors into one",
                 "Transfer bone weight",
+                "Alembic to VAT",
                 "VAT Baker from Animation Clip",
                 "VAT All in One"
             };
@@ -149,6 +151,7 @@ namespace JaimeCamachoDev.Multitool
             toolDescriptions["Bake pose"] = "Aplica la pose actual de una malla skinneda a un mesh esttico.";
             toolDescriptions["Combine animations/ors into one"] = "Fusiona varias animaciones en un solo clip optimizado.";
             toolDescriptions["Transfer bone weight"] = "Transfiere pesos de hueso entre mallas con distinta topologa.";
+            toolDescriptions["Alembic to VAT"] = "Convierte una secuencia Alembic en texturas VAT listas para shader y prefab.";
             toolDescriptions["VAT Baker from Animation Clip"] = "Genera texturas VAT a partir de un clip de animacin.";
             toolDescriptions["VAT All in One"] = "Paquete completo de herramientas VAT (en desarrollo).";
 
@@ -183,6 +186,7 @@ namespace JaimeCamachoDev.Multitool
             toolDrawers["Bake pose"] = BakeMeshTool.DrawTool;
             toolDrawers["Combine animations/ors into one"] = CombineAnimationsWithPathsTool.DrawTool;
             toolDrawers["Transfer bone weight"] = BoneWeightTransferTool.DrawTool;
+            toolDrawers["Alembic to VAT"] = AlembicToVatTool.DrawTool;
             toolDrawers["VAT Baker from Animation Clip"] = AnimationClipTextureBakerTool.DrawTool;
 
             toolDrawers["Lightmap checker"] = LightmapCheckerTool.DrawTool;
@@ -219,6 +223,7 @@ namespace JaimeCamachoDev.Multitool
             toolDeactivations["Micro triangle detector"] = MicroTrianglesDetectorTool.DisableSceneView;
             toolActivations["Pivot mover & aligner"] = PivotAdjusterTool.EnableSceneView;
             toolDeactivations["Pivot mover & aligner"] = PivotAdjusterTool.DisableSceneView;
+            toolDeactivations["Alembic to VAT"] = AlembicToVatTool.ResetState;
         }
 
         private void InitializeStyles()
