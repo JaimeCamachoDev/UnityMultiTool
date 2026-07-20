@@ -1,7 +1,7 @@
 {
-  "name": "com.jaimecamacho.unitymultitool.Editor",
+  "name": "com.jaimecamachodev.unitymultitool.Editor",
   "references": [
-    "com.jaimecamacho.unitymultitool.Runtime",
+    "com.jaimecamachodev.unitymultitool.Runtime",
     "Unity.EditorCoroutines.Editor",
     "Unity.Formats.Alembic.Runtime"
   ],

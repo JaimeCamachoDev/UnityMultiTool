@@ -14,8 +14,8 @@
       "dependencies": {},
       "url": "https://registry.npmjs.org"
     },
-    "com.jaimecamacho.unitymultitool": {
-      "version": "file:com.jaimecamacho.unitymultitool",
+    "com.jaimecamachodev.unitymultitool": {
+      "version": "file:com.jaimecamachodev.unitymultitool",
       "depth": 0,
       "source": "embedded",
       "dependencies": {}

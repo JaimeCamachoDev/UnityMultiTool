@@ -1,0 +1,29 @@
+{
+  "name": "com.jaimecamachodev.unitymultitool",
+  "version": "1.0.0",
+  "displayName": "UnityMultiTool",
+  "description": "Multi Herramienta",
+  "unity": "6000.0",
+  "unityRelease": "0f1",
+  "license": "MIT",
+  "documentationUrl": "https://github.com/JaimeCamachoDev/UnityMultiTool",
+  "changelogUrl": "https://github.com/JaimeCamachoDev/UnityMultiTool/releases",
+  "licensesUrl": "https://github.com/JaimeCamachoDev/UnityMultiTool/blob/main/LICENSE",
+  "keywords": [
+    "unity",
+    "multitool",
+    "editor",
+    "vat",
+    "animation",
+    "mesh"
+  ],
+  "author": {
+    "name": "JaimeCamachoDev",
+    "url": "https://github.com/JaimeCamachoDev",
+    "email": "jaime.camacho.dev@gmail.com"
+  },
+  "repository": {
+    "url": "https://github.com/JaimeCamachoDev/UnityMultiTool.git",
+    "type": "git"
+  }
+}
