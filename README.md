@@ -8,7 +8,40 @@ _**Herramienta con diversos usos para unity**_
 
 
 </header>
-   
+
+## 📦 Instalación (UnityMultiTool vía Package Manager)
+
+Esta tool se distribuye como paquete de Unity Package Manager con el id `com.jaimecamachodev.unitymultitool`, publicado en npm.
+
+Para instalarla en **otro proyecto de Unity**, añade un scoped registry a tu `Packages/manifest.json`:
+
+```json
+{
+  "scopedRegistries": [
+    {
+      "name": "JaimeCamachoDevs",
+      "url": "https://registry.npmjs.org",
+      "scopes": [
+        "com.jaimecamachodev"
+      ]
+    }
+  ],
+  "dependencies": {
+    "com.jaimecamachodev.unitymultitool": "1.0.0"
+  }
+}
+```
+
+También puedes hacerlo desde el Editor:
+1. `Edit > Project Settings > Package Manager`.
+2. En **Scoped Registries**, pulsa `+` y añade:
+   - **Name:** `JaimeCamachoDevs`
+   - **URL:** `https://registry.npmjs.org`
+   - **Scope(s):** `com.jaimecamachodev`
+3. Abre `Window > Package Manager`, cambia el desplegable a **My Registries** y busca **UnityMultiTool** para instalarla.
+
+---
+
 <footer>
    
 ## Después de crear el repositorio desde la plantilla, asegúrate de revisar lo siguiente:
