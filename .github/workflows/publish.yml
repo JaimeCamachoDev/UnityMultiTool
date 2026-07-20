@@ -14,6 +14,15 @@ name: Publish to npmjs
 # The service account needs the "Package Manager Package Signer" role.
 # npm side needs a Trusted Publisher configured for this package + publish.yml.
 #
+# BOOTSTRAP NOTE: npm's Trusted Publisher can only be configured from a package's
+# own settings page, which doesn't exist until the package has been published at
+# least once. This first release therefore publishes with the classic
+# NPM_TOKEN_PACKAGE secret instead of OIDC. Once this version is live on npm,
+# configure the Trusted Publisher (npmjs.com -> package -> Access) for
+# JaimeCamachoDev/UnityMultiTool + publish.yml, then remove the
+# NODE_AUTH_TOKEN line below and rely on `permissions: id-token: write` alone,
+# same as UnityFolders' publish.yml.
+#
 # To release: GitHub -> Releases -> Draft a new release -> tag vX.Y.Z -> Publish.
 # The published version is taken from the tag.
 
@@ -84,6 +93,10 @@ jobs:
           fi
 
       - name: Publish signed tarball to npm
+        env:
+          # TEMPORARY bootstrap auth for the very first publish — see note above.
+          # Remove once the Trusted Publisher is configured on npmjs.com.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN_PACKAGE }}
         run: |
           for i in 1 2 3; do
             npm publish "$TGZ" --access public && exit 0
