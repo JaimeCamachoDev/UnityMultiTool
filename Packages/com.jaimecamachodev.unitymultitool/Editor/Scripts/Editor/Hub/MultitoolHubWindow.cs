@@ -3,12 +3,14 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.UIElements;
 using OptiZone;
 using Optizone;
 using VZ_Optizone;
 using VZOptizone;
 using JaimeCamachoDev.Multitool.Animation;
 using JaimeCamachoDev.Multitool.Modeling;
+using JaimeCamachoDev.Multitool.UI;
 
 namespace JaimeCamachoDev.Multitool
 {
@@ -30,26 +32,13 @@ namespace JaimeCamachoDev.Multitool
         private readonly Dictionary<string, Action> toolDeactivations = new();
 
         private Category currentCategory = Category.Modelado;
-        private Vector2 libraryScrollPosition;
-        private Vector2 toolScrollPosition;
         private string searchQuery = string.Empty;
         private bool toolActive;
         private string activeTool = string.Empty;
 
-        private GUIStyle headerTitleStyle;
-        private GUIStyle headerSubtitleStyle;
-        private GUIStyle navigationContainerStyle;
-        private GUIStyle navigationTitleStyle;
-        private GUIStyle categoryButtonStyle;
-        private GUIStyle selectedCategoryButtonStyle;
-        private GUIStyle searchFieldStyle;
-        private GUIStyle toolCardStyle;
-        private GUIStyle toolCardTitleStyle;
-        private GUIStyle toolCardDescriptionStyle;
-        private GUIStyle openToolButtonStyle;
-        private GUIStyle emptyStateLabelStyle;
-
-        private Texture2D selectedCategoryBackground;
+        private VisualElement contentColumn;
+        private ScrollView librarySection;
+        private readonly Dictionary<Category, MTUIActionButton> categoryButtons = new();
 
         [MenuItem("Tools/JaimeCamachoDev/Multitool/Open Hub")]
         public static void ShowWindow()
@@ -67,7 +56,6 @@ namespace JaimeCamachoDev.Multitool
         private void OnDisable()
         {
             DeactivateActiveTool();
-            DestroyTextures();
         }
 
         private void InitializeData()
@@ -75,7 +63,6 @@ namespace JaimeCamachoDev.Multitool
             BuildCatalog();
             BuildDescriptions();
             BuildToolActions();
-            InitializeStyles();
         }
 
         private void BuildCatalog()
@@ -226,282 +213,247 @@ namespace JaimeCamachoDev.Multitool
             toolDeactivations["Alembic to VAT"] = AlembicToVatTool.ResetState;
         }
 
-        private void InitializeStyles()
+        // ------------------------------------------------------------------
+        // UI Toolkit shell — cards/buttons match the look used elsewhere
+        // (VzFolders' UI Toolkit windows). Each tool's own DrawTool() stays
+        // IMGUI and is embedded via IMGUIContainer when activated.
+        // ------------------------------------------------------------------
+
+        private void CreateGUI()
         {
-            if (headerTitleStyle != null)
+            rootVisualElement.Clear();
+            rootVisualElement.style.flexGrow = 1;
+
+            rootVisualElement.Add(BuildHeader());
+
+            var body = new VisualElement { style = { flexDirection = FlexDirection.Row, flexGrow = 1 } };
+            rootVisualElement.Add(body);
+
+            body.Add(BuildNavigation());
+
+            contentColumn = new VisualElement { style = { flexGrow = 1, paddingLeft = 4, paddingRight = 10, paddingTop = 6 } };
+            body.Add(contentColumn);
+
+            RefreshContent();
+        }
+
+        private VisualElement BuildHeader()
+        {
+            var header = new VisualElement
             {
-                return;
-            }
-
-            bool isProSkin = EditorGUIUtility.isProSkin;
-
-            headerTitleStyle = new GUIStyle(EditorStyles.boldLabel)
-            {
-                fontSize = 22,
-                normal = { textColor = isProSkin ? Color.white : new Color(0.13f, 0.15f, 0.18f) }
-            };
-
-            headerSubtitleStyle = new GUIStyle(EditorStyles.label)
-            {
-                fontSize = 11,
-                normal = { textColor = isProSkin ? new Color(0.75f, 0.78f, 0.82f) : new Color(0.32f, 0.36f, 0.44f) }
-            };
-
-            navigationContainerStyle = new GUIStyle("HelpBox")
-            {
-                padding = new RectOffset(14, 14, 16, 16),
-                margin = new RectOffset(4, 8, 8, 8)
-            };
-
-            navigationTitleStyle = new GUIStyle(EditorStyles.boldLabel)
-            {
-                fontSize = 13,
-                normal = { textColor = isProSkin ? Color.white : new Color(0.13f, 0.15f, 0.18f) }
-            };
-
-            categoryButtonStyle = new GUIStyle("Button")
-            {
-                alignment = TextAnchor.MiddleLeft,
-                fontSize = 12,
-                fixedHeight = 32,
-                padding = new RectOffset(12, 12, 6, 6)
-            };
-
-            selectedCategoryBackground = CreateColorTexture(new Color(0.27f, 0.43f, 0.89f, isProSkin ? 0.9f : 0.8f));
-
-            selectedCategoryButtonStyle = new GUIStyle(categoryButtonStyle)
-            {
-                normal =
+                style =
                 {
-                    background = selectedCategoryBackground,
-                    textColor = Color.white
-                },
-                hover =
-                {
-                    background = selectedCategoryBackground,
-                    textColor = Color.white
-                },
-                active =
-                {
-                    background = selectedCategoryBackground,
-                    textColor = Color.white
+                    backgroundColor = MTUIColors.HeaderBackground,
+                    paddingLeft = 18,
+                    paddingRight = 18,
+                    paddingTop = 14,
+                    paddingBottom = 14
                 }
             };
 
-            searchFieldStyle = new GUIStyle(EditorStyles.textField)
-            {
-                fontSize = 12
-            };
+            var title = new Label("JaimeCamachoDev Multitool");
+            title.style.fontSize = 20;
+            title.style.unityFontStyleAndWeight = FontStyle.Bold;
+            title.style.color = Color.white;
+            header.Add(title);
 
-            toolCardStyle = new GUIStyle("HelpBox")
-            {
-                padding = new RectOffset(16, 16, 14, 14),
-                margin = new RectOffset(4, 4, 6, 10)
-            };
+            var subtitle = new MTUIInfoLabel("Una evolución de VZ Optizone con un flujo de trabajo más claro y unificado.");
+            subtitle.style.marginBottom = 0;
+            subtitle.style.marginTop = 4;
+            header.Add(subtitle);
 
-            toolCardTitleStyle = new GUIStyle(EditorStyles.boldLabel)
-            {
-                fontSize = 14,
-                wordWrap = true
-            };
-
-            toolCardDescriptionStyle = new GUIStyle(EditorStyles.wordWrappedLabel)
-            {
-                fontSize = 11,
-                normal = { textColor = isProSkin ? new Color(0.78f, 0.82f, 0.89f) : new Color(0.32f, 0.36f, 0.44f) }
-            };
-
-            openToolButtonStyle = new GUIStyle("Button")
-            {
-                alignment = TextAnchor.MiddleCenter,
-                fontSize = 12,
-                fixedHeight = 24
-            };
-
-            emptyStateLabelStyle = new GUIStyle(EditorStyles.wordWrappedLabel)
-            {
-                fontSize = 12,
-                alignment = TextAnchor.MiddleCenter,
-                normal = { textColor = isProSkin ? new Color(0.75f, 0.78f, 0.82f) : new Color(0.32f, 0.36f, 0.44f) }
-            };
+            return header;
         }
 
-        private void DestroyTextures()
+        private VisualElement BuildNavigation()
         {
-            if (selectedCategoryBackground != null)
-            {
-                DestroyImmediate(selectedCategoryBackground);
-                selectedCategoryBackground = null;
-            }
+            var panel = new MTUIPanel("Categorías");
+            panel.style.width = 220;
+            panel.style.flexShrink = 0;
+            panel.style.flexGrow = 0;
 
-            headerTitleStyle = null;
+            categoryButtons.Clear();
+            AddCategoryButton(panel, Category.Modelado, "Modelado");
+            AddCategoryButton(panel, Category.Animacion, "Animación");
+            AddCategoryButton(panel, Category.Texturas, "Texturas");
+            AddCategoryButton(panel, Category.Iluminacion, "Iluminación");
+            AddCategoryButton(panel, Category.Miscelanea, "Miscelánea");
+
+            RefreshCategorySelection();
+
+            var spacer = new VisualElement { style = { flexGrow = 1 } };
+            panel.Add(spacer);
+
+            panel.Add(new MTUIInfoLabel("Las herramientas que evolucionaron desde VZ Optizone conviven aquí organizadas por flujo de trabajo."));
+
+            return panel;
         }
 
-        private static Texture2D CreateColorTexture(Color color)
+        private void AddCategoryButton(VisualElement parent, Category category, string label)
         {
-            Texture2D texture = new Texture2D(1, 1)
-            {
-                hideFlags = HideFlags.HideAndDontSave
-            };
-            texture.SetPixel(0, 0, color);
-            texture.Apply();
-            return texture;
-        }
-
-        private void OnGUI()
-        {
-            InitializeStyles();
-            DrawHeader();
-
-            GUILayout.Space(6f);
-
-            using (new EditorGUILayout.HorizontalScope())
-            {
-                DrawNavigation();
-
-                GUILayout.Space(10f);
-
-                GUILayout.BeginVertical();
-                {
-                    if (!toolActive)
-                    {
-                        DrawToolLibrary();
-                    }
-                    else
-                    {
-                        DrawActiveTool();
-                    }
-                }
-                GUILayout.EndVertical();
-            }
-        }
-
-        private void DrawHeader()
-        {
-            Rect headerRect = GUILayoutUtility.GetRect(position.width, 78f, GUILayout.ExpandWidth(true));
-            if (Event.current.type == EventType.Repaint)
-            {
-                EditorGUI.DrawRect(headerRect, new Color(0.14f, 0.16f, 0.22f));
-            }
-
-            Rect titleRect = new Rect(headerRect.x + 18f, headerRect.y + 16f, headerRect.width - 36f, 26f);
-            GUI.Label(titleRect, "JaimeCamachoDev Multitool", headerTitleStyle);
-
-            Rect subtitleRect = new Rect(headerRect.x + 18f, headerRect.y + 42f, headerRect.width - 36f, 20f);
-            GUI.Label(subtitleRect, "Una evolucin de VZ Optizone con un flujo de trabajo ms claro y unificado.", headerSubtitleStyle);
-        }
-
-        private void DrawNavigation()
-        {
-            GUILayout.BeginVertical(navigationContainerStyle, GUILayout.Width(220f), GUILayout.ExpandHeight(true));
-            GUILayout.Label("Categorías", navigationTitleStyle);
-            GUILayout.Space(6f);
-
-            DrawCategoryButton(Category.Modelado, "Modelado");
-            DrawCategoryButton(Category.Animacion, "Animación");
-            DrawCategoryButton(Category.Texturas, "Texturas");
-            DrawCategoryButton(Category.Iluminacion, "Iluminación");
-            DrawCategoryButton(Category.Miscelanea, "Miscelánea");
-
-            GUILayout.FlexibleSpace();
-
-            EditorGUILayout.HelpBox("Las herramientas que evolucionaron desde VZ Optizone conviven aquí organizadas por flujo de trabajo.", MessageType.Info);
-            GUILayout.EndVertical();
-        }
-
-        private void DrawCategoryButton(Category category, string label)
-        {
-            bool isSelected = currentCategory == category;
-            GUIStyle style = isSelected ? selectedCategoryButtonStyle : categoryButtonStyle;
-
-            if (GUILayout.Button(label, style))
+            var button = new MTUIActionButton(label, () =>
             {
                 currentCategory = category;
                 toolActive = false;
                 activeTool = string.Empty;
+                RefreshCategorySelection();
+                RefreshContent();
+            }, alignment: TextAnchor.MiddleLeft);
+
+            categoryButtons[category] = button;
+            parent.Add(button);
+        }
+
+        private void RefreshCategorySelection()
+        {
+            foreach (var kvp in categoryButtons)
+            {
+                bool selected = kvp.Key == currentCategory;
+                kvp.Value.SetColors(
+                    selected ? MTUIColors.BlueBackground : MTUIColors.NeutralBackground,
+                    selected ? MTUIColors.BlueBorder : MTUIColors.NeutralBorder,
+                    selected ? Color.white : MTUIColors.NeutralText
+                );
             }
         }
 
-        private void DrawToolLibrary()
+        private void RefreshContent()
         {
-            GUILayout.BeginVertical();
-            DrawSearchBar();
+            contentColumn.Clear();
+            contentColumn.Add(!toolActive ? BuildToolLibrary() : BuildActiveToolView());
+        }
 
-            GUILayout.Space(4f);
+        private VisualElement BuildToolLibrary()
+        {
+            var container = new VisualElement { style = { flexGrow = 1 } };
 
-            List<string> tools = categoryTools[currentCategory]
+            container.Add(BuildSearchBar());
+
+            librarySection = new ScrollView { style = { flexGrow = 1 } };
+            container.Add(librarySection);
+
+            RefreshToolCards();
+
+            return container;
+        }
+
+        private VisualElement BuildSearchBar()
+        {
+            var row = new VisualElement { style = { flexDirection = FlexDirection.Row, alignItems = Align.Center, marginBottom = 8 } };
+            MTUIStyle.ApplyRoundedBox(row, 8);
+            MTUIStyle.ApplyPadding(row, 6, 9);
+            row.style.backgroundColor = MTUIColors.PanelBackground;
+            MTUIStyle.ApplyBorderColor(row, MTUIColors.NeutralBorder);
+
+            var label = new Label("Buscar");
+            label.style.unityFontStyleAndWeight = FontStyle.Bold;
+            label.style.width = 60;
+            row.Add(label);
+
+            var searchField = new TextField { value = searchQuery };
+            searchField.style.flexGrow = 1;
+            searchField.RegisterValueChangedCallback(evt =>
+            {
+                searchQuery = evt.newValue;
+                RefreshToolCards();
+            });
+            row.Add(searchField);
+
+            var clearButton = new MTUIActionButton("Limpiar", () =>
+            {
+                searchQuery = string.Empty;
+                searchField.SetValueWithoutNotify(string.Empty);
+                RefreshToolCards();
+            }, MTUIColors.NeutralBackground, MTUIColors.NeutralBorder, MTUIColors.NeutralText);
+            clearButton.style.marginLeft = 6;
+            row.Add(clearButton);
+
+            return row;
+        }
+
+        private void RefreshToolCards()
+        {
+            librarySection.Clear();
+
+            var tools = categoryTools[currentCategory]
                 .Where(t => string.IsNullOrEmpty(searchQuery) || t.IndexOf(searchQuery, StringComparison.OrdinalIgnoreCase) >= 0)
                 .ToList();
 
-            libraryScrollPosition = EditorGUILayout.BeginScrollView(libraryScrollPosition);
-
             if (tools.Count == 0)
             {
-                GUILayout.FlexibleSpace();
-                GUILayout.Label("No se encontraron herramientas que coincidan con la búsqueda actual.", emptyStateLabelStyle);
-                GUILayout.FlexibleSpace();
-            }
-            else
-            {
-                foreach (string toolName in tools)
-                {
-                    DrawToolCard(toolName);
-                }
+                var empty = new MTUIInfoLabel("No se encontraron herramientas que coincidan con la búsqueda actual.");
+                empty.style.unityTextAlign = TextAnchor.MiddleCenter;
+                empty.style.marginTop = 24;
+                librarySection.Add(empty);
+                return;
             }
 
-            EditorGUILayout.EndScrollView();
-            GUILayout.EndVertical();
+            foreach (string toolName in tools)
+                librarySection.Add(BuildToolCard(toolName));
         }
 
-        private void DrawSearchBar()
-        {
-            using (new EditorGUILayout.HorizontalScope(EditorStyles.helpBox))
-            {
-                GUILayout.Label("Buscar", navigationTitleStyle, GUILayout.Width(60f));
-                GUI.SetNextControlName("MultitoolSearchField");
-                searchQuery = EditorGUILayout.TextField(searchQuery, searchFieldStyle);
-
-                if (!string.IsNullOrEmpty(searchQuery))
-                {
-                    if (GUILayout.Button("Limpiar", GUILayout.Width(70f)))
-                    {
-                        searchQuery = string.Empty;
-                        GUI.FocusControl(null);
-                    }
-                }
-            }
-        }
-
-        private void DrawToolCard(string toolName)
+        private VisualElement BuildToolCard(string toolName)
         {
             bool toolAvailable = toolDrawers.ContainsKey(toolName);
 
-            GUILayout.BeginVertical(toolCardStyle);
-            GUILayout.Label(toolName, toolCardTitleStyle);
+            var card = new MTUIPanel(toolName);
+            card.TitleLabel.style.fontSize = 13;
 
             if (toolDescriptions.TryGetValue(toolName, out string description) && !string.IsNullOrEmpty(description))
-            {
-                GUILayout.Label(description, toolCardDescriptionStyle);
-            }
+                card.Add(new MTUIInfoLabel(description));
 
-            GUILayout.Space(8f);
-
-            using (new EditorGUI.DisabledScope(!toolAvailable))
-            {
-                string buttonLabel = toolAvailable ? "Abrir herramienta" : "Próximamente";
-                if (GUILayout.Button(buttonLabel, openToolButtonStyle))
-                {
-                    ActivateTool(toolName);
-                }
-            }
+            var openButton = new MTUIActionButton(
+                toolAvailable ? "Abrir herramienta" : "Próximamente",
+                () => { ActivateTool(toolName); RefreshContent(); }
+            );
+            if (!toolAvailable) openButton.SetAvailable(false);
+            card.Add(openButton);
 
             if (!toolAvailable)
             {
-                GUILayout.Space(4f);
-                EditorGUILayout.HelpBox("Esta herramienta aún no está disponible en la nueva Multitool.", MessageType.Warning);
+                var warning = new MTUIInfoLabel("Esta herramienta aún no está disponible en la nueva Multitool.");
+                warning.style.color = new Color(0.95f, 0.75f, 0.3f);
+                card.Add(warning);
             }
 
-            GUILayout.EndVertical();
+            return card;
+        }
+
+        private VisualElement BuildActiveToolView()
+        {
+            var container = new VisualElement { style = { flexGrow = 1 } };
+
+            var headerRow = new VisualElement { style = { flexDirection = FlexDirection.Row, alignItems = Align.Center, marginBottom = 8 } };
+            MTUIStyle.ApplyRoundedBox(headerRow, 8);
+            MTUIStyle.ApplyPadding(headerRow, 6, 9);
+            headerRow.style.backgroundColor = MTUIColors.PanelBackground;
+            MTUIStyle.ApplyBorderColor(headerRow, MTUIColors.NeutralBorder);
+
+            headerRow.Add(new MTUIActionButton("← Volver a la biblioteca", () =>
+            {
+                DeactivateActiveTool();
+                RefreshContent();
+            }, MTUIColors.NeutralBackground, MTUIColors.NeutralBorder, MTUIColors.NeutralText));
+
+            var titleLabel = new Label(activeTool);
+            titleLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            titleLabel.style.fontSize = 13;
+            titleLabel.style.marginLeft = 10;
+            headerRow.Add(titleLabel);
+
+            container.Add(headerRow);
+
+            var scroll = new ScrollView { style = { flexGrow = 1 } };
+            scroll.Add(new IMGUIContainer(() =>
+            {
+                if (toolDrawers.TryGetValue(activeTool, out Action drawAction))
+                    drawAction.Invoke();
+                else
+                    EditorGUILayout.HelpBox("La herramienta seleccionada todavía no forma parte de la nueva experiencia Multitool.", MessageType.Warning);
+            }));
+            container.Add(scroll);
+
+            return container;
         }
 
         private void ActivateTool(string toolName)
@@ -522,38 +474,6 @@ namespace JaimeCamachoDev.Multitool
             }
         }
 
-        private void DrawActiveTool()
-        {
-            GUILayout.BeginVertical();
-
-            using (new EditorGUILayout.HorizontalScope(EditorStyles.helpBox))
-            {
-                if (GUILayout.Button("← Volver a la biblioteca", GUILayout.Width(210f), GUILayout.Height(24f)))
-                {
-                    DeactivateActiveTool();
-                    return;
-                }
-
-                GUILayout.Space(6f);
-                GUILayout.Label(activeTool, toolCardTitleStyle);
-                GUILayout.FlexibleSpace();
-            }
-
-            toolScrollPosition = EditorGUILayout.BeginScrollView(toolScrollPosition);
-
-            if (toolDrawers.TryGetValue(activeTool, out Action drawAction))
-            {
-                drawAction.Invoke();
-            }
-            else
-            {
-                EditorGUILayout.HelpBox("La herramienta seleccionada todavía no forma parte de la nueva experiencia Multitool.", MessageType.Warning);
-            }
-
-            EditorGUILayout.EndScrollView();
-            GUILayout.EndVertical();
-        }
-
         private void DeactivateActiveTool()
         {
             if (!toolActive)
@@ -568,7 +488,6 @@ namespace JaimeCamachoDev.Multitool
 
             toolActive = false;
             activeTool = string.Empty;
-            toolScrollPosition = Vector2.zero;
         }
     }
 }
