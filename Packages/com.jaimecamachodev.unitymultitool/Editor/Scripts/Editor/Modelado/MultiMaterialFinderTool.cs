@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEditor;
 using System.Collections.Generic;
 
-namespace Optizone
+namespace JaimeCamachoDev.Multitool.Modeling
 {
     public static class MultiMaterialFinderTool
     {
@@ -13,7 +13,7 @@ namespace Optizone
         {
             GUILayout.Label("Multi-Material Finder", EditorStyles.boldLabel);
 
-            // Botón para encontrar los objetos
+            // BotÃ³n para encontrar los objetos
             if (GUILayout.Button("Find Objects with Multiple Materials"))
             {
                 FindObjectsWithMultipleMaterials();
@@ -33,14 +33,14 @@ namespace Optizone
                 {
                     GUILayout.BeginHorizontal();
 
-                    // Botón para seleccionar el objeto
+                    // BotÃ³n para seleccionar el objeto
                     if (GUILayout.Button(objectsWithMultiMaterial[i].name, GUILayout.Width(200)))
                     {
                         Selection.activeGameObject = objectsWithMultiMaterial[i];
                         EditorGUIUtility.PingObject(objectsWithMultiMaterial[i]);
                     }
 
-                    // Botón para resaltar el objeto
+                    // BotÃ³n para resaltar el objeto
                     if (GUILayout.Button("Highlight", GUILayout.Width(100)))
                     {
                         EditorGUIUtility.PingObject(objectsWithMultiMaterial[i]);
@@ -57,11 +57,11 @@ namespace Optizone
             }
         }
 
-        // Método para encontrar los objetos con varios materiales
+        // MÃ©todo para encontrar los objetos con varios materiales
         private static void FindObjectsWithMultipleMaterials()
         {
             objectsWithMultiMaterial.Clear();
-            Renderer[] renderers = Object.FindObjectsOfType<Renderer>();
+            Renderer[] renderers = Object.FindObjectsByType<Renderer>(FindObjectsSortMode.None);
 
             foreach (Renderer renderer in renderers)
             {

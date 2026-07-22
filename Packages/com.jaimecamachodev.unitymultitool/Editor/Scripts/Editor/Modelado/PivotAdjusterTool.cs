@@ -486,7 +486,20 @@ namespace JaimeCamachoDev.Multitool.Modeling
             }
             else
             {
-                worldOffset = pivotWorld - transform.position;
+                // Sin un MeshFilter con mesh no hay geometría que compensar: mover el transform
+                // directamente (como hacía antes) teletransportaría el objeto a la posición del
+                // pivote en vez de mantenerlo quieto. Se omite y se avisa (p.ej. SkinnedMeshRenderer,
+                // que esta herramienta todavía no soporta, u objetos sin geometría).
+                SkinnedMeshRenderer skinnedMeshRenderer = go.GetComponent<SkinnedMeshRenderer>();
+                if (skinnedMeshRenderer != null)
+                {
+                    Debug.LogWarning($"[Pivot] '{go.name}' usa un SkinnedMeshRenderer; esta herramienta aún no lo soporta y el objeto se omite.");
+                }
+                else
+                {
+                    Debug.LogWarning($"[Pivot] '{go.name}' no tiene un MeshFilter con mesh asignado; se omite para no desplazar el objeto sin geometría que compensarlo.");
+                }
+                return;
             }
 
             ApplyTransformOffset(transform, worldOffset, children, childPositions, childRotations);

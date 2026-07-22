@@ -75,6 +75,9 @@ namespace JaimeCamachoDev.Multitool.Modeling
 
             List<string> processed = new List<string>();
 
+            int undoGroup = Undo.GetCurrentGroup();
+            Undo.SetCurrentGroupName("Reset XForm");
+
             foreach (GameObject gameObject in selection)
             {
                 if (ApplyResetToObject(gameObject))
@@ -82,6 +85,8 @@ namespace JaimeCamachoDev.Multitool.Modeling
                     processed.Add(gameObject.name);
                 }
             }
+
+            Undo.CollapseUndoOperations(undoGroup);
 
             if (processed.Count > 0)
             {
@@ -182,23 +187,31 @@ namespace JaimeCamachoDev.Multitool.Modeling
             {
                 meshToEdit = Object.Instantiate(sourceMesh);
                 meshToEdit.name = sourceMesh.name + "_ResetXForm";
+                Undo.RegisterCreatedObjectUndo(meshToEdit, "Reset XForm");
 
                 if (owner != null)
                 {
                     Undo.RecordObject(owner, "Reset XForm");
                 }
 
-                if (saveDuplicatedMeshAsAsset && meshAssetFolder != null)
+                if (saveDuplicatedMeshAsAsset)
                 {
-                    string assetFolderPath = AssetDatabase.GetAssetPath(meshAssetFolder);
-                    if (!string.IsNullOrEmpty(assetFolderPath) && AssetDatabase.IsValidFolder(assetFolderPath))
+                    if (meshAssetFolder != null)
                     {
-                        string assetPath = AssetDatabase.GenerateUniqueAssetPath(Path.Combine(assetFolderPath, meshToEdit.name + ".asset"));
-                        AssetDatabase.CreateAsset(meshToEdit, assetPath);
+                        string assetFolderPath = AssetDatabase.GetAssetPath(meshAssetFolder);
+                        if (!string.IsNullOrEmpty(assetFolderPath) && AssetDatabase.IsValidFolder(assetFolderPath))
+                        {
+                            string assetPath = AssetDatabase.GenerateUniqueAssetPath(Path.Combine(assetFolderPath, meshToEdit.name + ".asset"));
+                            AssetDatabase.CreateAsset(meshToEdit, assetPath);
+                        }
+                        else
+                        {
+                            Debug.LogWarning("La carpeta seleccionada para guardar el mesh duplicado no es válida. Se usará el mesh en memoria.");
+                        }
                     }
                     else
                     {
-                        Debug.LogWarning("La carpeta seleccionada para guardar el mesh duplicado no es válida. Se usará el mesh en memoria.");
+                        Debug.LogWarning("No se asignó una carpeta destino: el mesh duplicado no se guardará como asset y permanecerá solo en memoria.");
                     }
                 }
             }
@@ -245,8 +258,36 @@ namespace JaimeCamachoDev.Multitool.Modeling
                 mesh.tangents = tangents;
             }
 
+            // Una escala espejada (determinante negativo) invierte la orientación de las caras;
+            // sin corregir el winding order las caras quedarían con culling invertido.
+            if (Determinant3x3(localMatrix) < 0f)
+            {
+                ReverseTriangleWinding(mesh);
+            }
+
             mesh.RecalculateBounds();
             EditorUtility.SetDirty(mesh);
+        }
+
+        private static float Determinant3x3(Matrix4x4 matrix)
+        {
+            Vector3 column0 = matrix.GetColumn(0);
+            Vector3 column1 = matrix.GetColumn(1);
+            Vector3 column2 = matrix.GetColumn(2);
+            return Vector3.Dot(column0, Vector3.Cross(column1, column2));
+        }
+
+        private static void ReverseTriangleWinding(Mesh mesh)
+        {
+            for (int subMeshIndex = 0; subMeshIndex < mesh.subMeshCount; subMeshIndex++)
+            {
+                int[] triangles = mesh.GetTriangles(subMeshIndex);
+                for (int i = 0; i < triangles.Length; i += 3)
+                {
+                    (triangles[i + 1], triangles[i + 2]) = (triangles[i + 2], triangles[i + 1]);
+                }
+                mesh.SetTriangles(triangles, subMeshIndex);
+            }
         }
 
         private readonly struct TransformState
@@ -289,6 +330,14 @@ namespace JaimeCamachoDev.Multitool.Modeling
             if (scale.x != 0f) column0 /= scale.x;
             if (scale.y != 0f) column1 /= scale.y;
             if (scale.z != 0f) column2 /= scale.z;
+
+            // Quaternion.LookRotation solo puede representar rotaciones propias (determinante +1).
+            // Si la matriz original es una reflexión (determinante negativo), volcamos esa reflexión
+            // sobre la escala en X en vez de perderla al construir la rotación.
+            if (Vector3.Dot(column0, Vector3.Cross(column1, column2)) < 0f)
+            {
+                scale.x = -scale.x;
+            }
 
             rotation = Quaternion.LookRotation(column2, column1);
         }

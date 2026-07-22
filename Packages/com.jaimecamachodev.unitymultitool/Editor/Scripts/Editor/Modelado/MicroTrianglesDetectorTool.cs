@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 
-namespace VZ_Optizone
+namespace JaimeCamachoDev.Multitool.Modeling
 {
     public static class MicroTrianglesDetectorTool
     {
@@ -113,10 +113,17 @@ namespace VZ_Optizone
 
         private static void FocusOnTriangle((Vector3 v1, Vector3 v2, Vector3 v3) triangle)
         {
+            SceneView sceneView = SceneView.lastActiveSceneView;
+            if (sceneView == null)
+            {
+                Debug.LogWarning("No Scene view is open. Open a Scene view and try again.");
+                return;
+            }
+
             Vector3 center = (triangle.v1 + triangle.v2 + triangle.v3) / 3f;
-            SceneView.lastActiveSceneView.pivot = center;
-            SceneView.lastActiveSceneView.size = 1f;
-            SceneView.lastActiveSceneView.Repaint();
+            sceneView.pivot = center;
+            sceneView.size = 1f;
+            sceneView.Repaint();
             SceneView.RepaintAll();
         }
         public static void OnSceneGUI(SceneView sceneView)

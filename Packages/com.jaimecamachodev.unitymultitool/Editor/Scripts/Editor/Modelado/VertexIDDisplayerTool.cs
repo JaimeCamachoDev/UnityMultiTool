@@ -1,47 +1,44 @@
 using UnityEngine;
 using UnityEditor;
 
-namespace VZ_Optizone
+namespace JaimeCamachoDev.Multitool.Modeling
 {
     public static class VertexIDDisplayerTool
     {
-        // Variables para almacenar el objeto seleccionado, la malla, y la posiciÛn del vÈrtice
+        // Variables para almacenar el objeto seleccionado, la malla, y la posici√≥n del v√©rtice
         private static GameObject selectedObject;
         private static Mesh selectedMesh;
         private static Vector3[] vertices;
         private static int vertexID = -1;
         private static Vector3 vertexWorldPosition;
 
-        // MÈtodo para dibujar la herramienta en el Editor
+        // M√©todo para dibujar la herramienta en el Editor
         public static void DrawTool()
         {
-            GUILayout.Label("VZ Optizone - Vertex ID Displayer", EditorStyles.boldLabel);
+            GUILayout.Label("Vertex ID Displayer", EditorStyles.boldLabel);
 
             // Campo para seleccionar el GameObject
-            selectedObject = (GameObject)EditorGUILayout.ObjectField("GameObject", selectedObject, typeof(GameObject), true);
+            GameObject newSelectedObject = (GameObject)EditorGUILayout.ObjectField("GameObject", selectedObject, typeof(GameObject), true);
 
-            // Si se selecciona un objeto, obtener el MeshFilter
+            // Solo releer la malla y sus v√©rtices cuando cambia el objeto seleccionado
+            if (newSelectedObject != selectedObject)
+            {
+                selectedObject = newSelectedObject;
+
+                MeshFilter changedMeshFilter = selectedObject != null ? selectedObject.GetComponent<MeshFilter>() : null;
+                selectedMesh = changedMeshFilter != null ? changedMeshFilter.sharedMesh : null;
+                vertices = selectedMesh != null ? selectedMesh.vertices : null;
+            }
+
             if (selectedObject != null)
             {
-                MeshFilter meshFilter = selectedObject.GetComponent<MeshFilter>();
-                if (meshFilter != null)
-                {
-                    selectedMesh = meshFilter.sharedMesh;
-                }
-                else
-                {
-                    selectedMesh = null;
-                }
-
                 if (selectedMesh != null)
                 {
-                    vertices = selectedMesh.vertices;
-
-                    // Campo para ingresar el ID del vÈrtice
+                    // Campo para ingresar el ID del v√©rtice
                     GUILayout.Label("Enter Vertex ID to Display:");
                     vertexID = EditorGUILayout.IntField(vertexID);
 
-                    // BotÛn para mostrar el vÈrtice seleccionado
+                    // Bot√≥n para mostrar el v√©rtice seleccionado
                     if (GUILayout.Button("Display Vertex ID"))
                     {
                         DisplayVertexID();
@@ -49,7 +46,7 @@ namespace VZ_Optizone
 
                     GUILayout.Space(10);
 
-                    // Mostrar las coordenadas del vÈrtice en el mundo
+                    // Mostrar las coordenadas del v√©rtice en el mundo
                     if (vertexID >= 0 && vertexID < vertices.Length)
                     {
                         GUILayout.Label($"Vertex {vertexID} World Position:");
@@ -65,7 +62,7 @@ namespace VZ_Optizone
             }
         }
 
-        // MÈtodo para mostrar la informaciÛn del vÈrtice seleccionado
+        // M√©todo para mostrar la informaci√≥n del v√©rtice seleccionado
         private static void DisplayVertexID()
         {
             if (vertexID >= 0 && vertexID < vertices.Length)
@@ -80,7 +77,7 @@ namespace VZ_Optizone
             }
         }
 
-        // MÈtodo para manejar la escena y dibujar el vÈrtice
+        // M√©todo para manejar la escena y dibujar el v√©rtice
         public static void OnSceneGUI(SceneView sceneView)
         {
             if (selectedMesh == null || vertices == null || vertexID < 0 || vertexID >= vertices.Length)
@@ -90,12 +87,12 @@ namespace VZ_Optizone
 
             Handles.color = Color.green;
 
-            // Dibujar el vÈrtice especificado por el ID
+            // Dibujar el v√©rtice especificado por el ID
             Handles.Label(vertexWorldPosition, vertexID.ToString());
             Handles.SphereHandleCap(0, vertexWorldPosition, Quaternion.identity, 0.05f, EventType.Repaint);
         }
 
-        // MÈtodos para gestionar el evento de la escena
+        // M√©todos para gestionar el evento de la escena
         public static void EnableSceneView()
         {
             SceneView.duringSceneGui += OnSceneGUI;

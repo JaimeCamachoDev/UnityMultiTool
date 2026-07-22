@@ -1,13 +1,12 @@
 using UnityEditor;
 using UnityEngine;
 
-namespace VZ_Optizone
+namespace JaimeCamachoDev.Multitool.Modeling
 {
     public static class RecalculateMeshBoundsTool
     {
         private static MeshFilter targetMeshFilter;
         private static Bounds editableBounds;
-        private static bool boundsInitialized = false; // Evita el autocalculado inicial
 
         public static void DrawTool()
         {
@@ -16,18 +15,13 @@ namespace VZ_Optizone
             // Campo para seleccionar el MeshFilter
             MeshFilter newMeshFilter = (MeshFilter)EditorGUILayout.ObjectField("Target MeshFilter", targetMeshFilter, typeof(MeshFilter), true);
 
-            // Si cambiamos de objeto, reinicializamos los bounds
+            // Si cambiamos de objeto, reinicializamos los bounds con los del mesh actual
             if (newMeshFilter != targetMeshFilter)
             {
                 targetMeshFilter = newMeshFilter;
                 if (targetMeshFilter != null && targetMeshFilter.sharedMesh != null)
                 {
-                    //editableBounds = targetMeshFilter.sharedMesh.bounds; // Inicializamos al seleccionar un objeto
-                    boundsInitialized = true;
-                }
-                else
-                {
-                    boundsInitialized = false;
+                    editableBounds = targetMeshFilter.sharedMesh.bounds;
                 }
             }
 
@@ -37,7 +31,13 @@ namespace VZ_Optizone
                 return;
             }
 
-            // **Mostrar y permitir la edici髇 de los bounds actuales**
+            if (targetMeshFilter.sharedMesh == null)
+            {
+                EditorGUILayout.HelpBox("The selected GameObject's MeshFilter has no Mesh assigned.", MessageType.Warning);
+                return;
+            }
+
+            // Mostrar y permitir la edici贸n de los bounds actuales
             Vector3 newCenter = EditorGUILayout.Vector3Field("Bounds Center", editableBounds.center);
             Vector3 newSize = EditorGUILayout.Vector3Field("Bounds Size", editableBounds.size);
 
@@ -48,13 +48,13 @@ namespace VZ_Optizone
                 editableBounds.size = newSize;
             }
 
-            // Bot髇 para aplicar los cambios
+            // Bot贸n para aplicar los cambios
             if (GUILayout.Button("Apply Bounds"))
             {
                 ApplyBounds();
             }
 
-            // Bot髇 para resetear los bounds originales
+            // Bot贸n para resetear los bounds originales
             if (GUILayout.Button("Reset Bounds to last saved Mesh Bounds"))
             {
                 ResetBounds();
@@ -67,11 +67,16 @@ namespace VZ_Optizone
             {
                 Mesh mesh = targetMeshFilter.sharedMesh;
 
-                // Aplicar los nuevos bounds
+                Undo.RecordObject(mesh, "Adjust Mesh Bounds");
                 mesh.bounds = editableBounds;
 
-                // Forzar la actualizaci髇 en el editor
-                EditorUtility.SetDirty(targetMeshFilter);
+                // El objeto realmente modificado es el Mesh, no el MeshFilter que lo referencia
+                EditorUtility.SetDirty(mesh);
+                if (!string.IsNullOrEmpty(AssetDatabase.GetAssetPath(mesh)))
+                {
+                    AssetDatabase.SaveAssets();
+                }
+
                 Debug.Log("Bounds updated! New size: " + mesh.bounds.size);
             }
         }
@@ -88,10 +93,9 @@ namespace VZ_Optizone
         public static void SetTarget(MeshFilter meshFilter)
         {
             targetMeshFilter = meshFilter;
-            if (targetMeshFilter != null)
+            if (targetMeshFilter != null && targetMeshFilter.sharedMesh != null)
             {
                 editableBounds = targetMeshFilter.sharedMesh.bounds;
-                boundsInitialized = true;
             }
         }
 
@@ -110,7 +114,7 @@ namespace VZ_Optizone
         public static void EnableSceneView()
         {
             SceneView.duringSceneGui += OnSceneGUI;
-            SceneView.RepaintAll(); // Asegura la actualizaci髇 en la vista
+            SceneView.RepaintAll(); // Asegura la actualizaci贸n en la vista
         }
 
         // Deshabilita los Handles en la escena

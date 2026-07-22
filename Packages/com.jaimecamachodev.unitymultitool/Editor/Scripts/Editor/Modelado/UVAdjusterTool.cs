@@ -2,47 +2,49 @@ using UnityEngine;
 using UnityEditor;
 using System.Collections.Generic;
 
-namespace VZ_Optizone
+namespace JaimeCamachoDev.Multitool.Modeling
 {
-    public static class UVAdjusterToolOpti
+    public static class UVAdjusterTool
     {
-        // Variables est醫icas para las filas y columnas
+        // Variables est谩ticas para las filas y columnas
         private static int rows = 1;
         private static int columns = 1;
 
-        // Variables est醫icas para la posici髇 en la cuadr韈ula
+        // Variables est谩ticas para la posici贸n en la cuadr铆cula
         private static int gridX = 0;
         private static int gridY = 0;
 
-        // Lista est醫ica para almacenar los Mesh Filters seleccionados
+        // Lista est谩tica para almacenar los Mesh Filters seleccionados
         private static List<MeshFilter> selectedMeshFilters = new List<MeshFilter>();
 
-        // Diccionario para almacenar las UV originales antes de cualquier modificaci髇
+        // Diccionario para almacenar las UV originales antes de cualquier modificaci贸n
         private static Dictionary<MeshFilter, Vector2[]> originalUVs = new Dictionary<MeshFilter, Vector2[]>();
 
-        // M閠odo que dibuja la herramienta en el editor
+        // M茅todo que dibuja la herramienta en el editor
         public static void DrawTool()
         {
-            GUILayout.Label("VZ Optizone UV Adjuster Tool", EditorStyles.boldLabel);
+            GUILayout.Label("UV Adjuster Tool", EditorStyles.boldLabel);
+            EditorGUILayout.HelpBox("Esta herramienta modifica las UVs directamente sobre el Mesh asset compartido: afecta a todos los objetos que usen esa misma malla en el proyecto.", MessageType.Info);
 
             // Input para las filas y columnas
             rows = EditorGUILayout.IntField("Rows", rows);
             columns = EditorGUILayout.IntField("Columns", columns);
 
-            // Input para la posici髇 en la cuadr韈ula
+            // Input para la posici贸n en la cuadr铆cula
             gridX = EditorGUILayout.IntField("Grid X", gridX);
             gridY = EditorGUILayout.IntField("Grid Y", gridY);
 
             // Mostrar lista de Mesh Filters seleccionados
             GUILayout.Label("Select Mesh Filters", EditorStyles.label);
 
-            // Bot髇 para agregar un nuevo Mesh Filter
+            // Bot贸n para agregar un nuevo Mesh Filter
             if (GUILayout.Button("Add Mesh Filter"))
             {
                 selectedMeshFilters.Add(null);
             }
 
-            // Mostrar todos los Mesh Filters con un bot髇 de eliminar
+            // Mostrar todos los Mesh Filters con un bot贸n de eliminar
+            int indexToRemove = -1;
             for (int i = 0; i < selectedMeshFilters.Count; i++)
             {
                 GUILayout.BeginHorizontal();
@@ -50,29 +52,34 @@ namespace VZ_Optizone
                 // Campo para seleccionar un Mesh Filter
                 selectedMeshFilters[i] = (MeshFilter)EditorGUILayout.ObjectField(selectedMeshFilters[i], typeof(MeshFilter), true);
 
-                // Bot髇 para eliminar el Mesh Filter de la lista
+                // Bot贸n para eliminar el Mesh Filter de la lista
                 if (GUILayout.Button("Remove", GUILayout.Width(70)))
                 {
-                    selectedMeshFilters.RemoveAt(i);
+                    indexToRemove = i;
                 }
 
                 GUILayout.EndHorizontal();
             }
 
-            // Bot髇 para ajustar UVs
+            if (indexToRemove >= 0)
+            {
+                selectedMeshFilters.RemoveAt(indexToRemove);
+            }
+
+            // Bot贸n para ajustar UVs
             if (GUILayout.Button("Adjust UVs"))
             {
                 AdjustUVs();
             }
 
-            // Bot髇 para deshacer los cambios
+            // Bot贸n para deshacer los cambios
             if (GUILayout.Button("Undo last change"))
             {
                 UndoUVChanges();
             }
         }
 
-        // M閠odo para ajustar las UVs de las mallas seleccionadas
+        // M茅todo para ajustar las UVs de las mallas seleccionadas
         private static void AdjustUVs()
         {
             if (selectedMeshFilters.Count == 0)
@@ -96,17 +103,23 @@ namespace VZ_Optizone
                 Mesh mesh = meshFilter.sharedMesh;
                 Vector2[] uvs = mesh.uv;
 
+                if (uvs.Length == 0)
+                {
+                    Debug.LogWarning($"'{mesh.name}' no tiene UVs; se omite.");
+                    continue;
+                }
+
                 // Almacenar las UV originales antes de modificarlas
                 if (!originalUVs.ContainsKey(meshFilter))
                 {
                     originalUVs[meshFilter] = (Vector2[])uvs.Clone();
                 }
 
-                // Calcular el tama駉 del cuadrado de UV
+                // Calcular el tama帽o del cuadrado de UV
                 float uvWidth = 1.0f / columns;
                 float uvHeight = 1.0f / rows;
 
-                // Calcular el offset basado en la posici髇 de la cuadr韈ula
+                // Calcular el offset basado en la posici贸n de la cuadr铆cula
                 Vector2 offset = new Vector2(gridX * uvWidth, gridY * uvHeight);
 
                 // Ajustar las UVs
@@ -119,6 +132,7 @@ namespace VZ_Optizone
                 }
 
                 // Asignar las nuevas UVs a la malla
+                Undo.RecordObject(mesh, "Adjust UVs");
                 mesh.uv = uvs;
 
                 // Marcar la malla como modificada y guardar los cambios
@@ -137,7 +151,7 @@ namespace VZ_Optizone
             }
         }
 
-        // M閠odo para deshacer los cambios en las UVs
+        // M茅todo para deshacer los cambios en las UVs
         private static void UndoUVChanges()
         {
             foreach (var meshFilter in selectedMeshFilters)
@@ -147,6 +161,7 @@ namespace VZ_Optizone
 
                 // Obtener la malla y las UV originales
                 Mesh mesh = meshFilter.sharedMesh;
+                Undo.RecordObject(mesh, "Restore Original UVs");
                 mesh.uv = originalUVs[meshFilter];
 
                 // Marcar la malla como modificada y guardar los cambios
