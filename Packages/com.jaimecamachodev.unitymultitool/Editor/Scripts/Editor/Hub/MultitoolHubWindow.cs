@@ -4,7 +4,6 @@ using System.Linq;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
-using OptiZone;
 using Optizone;
 using VZ_Optizone;
 using VZOptizone;
@@ -183,7 +182,7 @@ namespace JaimeCamachoDev.Multitool
             toolDrawers["Multi material splitter"] = MultimaterialMeshSplitterTool.DrawTool;
             toolDrawers["Merge mesh and create atlas"] = MeshAtlasBakerTool.DrawTool;
             toolDrawers["Generate mesh uv lightmaps"] = UV2GeneratorTool.DrawTool;
-            toolDrawers["Move UV inside grid"] = UVAdjusterToolOpti.DrawTool;
+            toolDrawers["Move UV inside grid"] = UVAdjusterTool.DrawTool;
             toolDrawers["Vertex ID Display"] = VertexIDDisplayerTool.DrawTool;
             toolDrawers["Micro triangle detector"] = MicroTrianglesDetectorTool.DrawTool;
             toolDrawers["Advanced mesh combiner"] = MeshCombinerTool.DrawTool;
@@ -210,6 +209,9 @@ namespace JaimeCamachoDev.Multitool
             toolDeactivations["Micro triangle detector"] = MicroTrianglesDetectorTool.DisableSceneView;
             toolActivations["Pivot mover & aligner"] = PivotAdjusterTool.EnableSceneView;
             toolDeactivations["Pivot mover & aligner"] = PivotAdjusterTool.DisableSceneView;
+
+            toolActivations["Vertex ID Display"] = VertexIDDisplayerTool.EnableSceneView;
+            toolDeactivations["Vertex ID Display"] = VertexIDDisplayerTool.DisableSceneView;
             toolDeactivations["Alembic to VAT"] = AlembicToVatTool.ResetState;
         }
 

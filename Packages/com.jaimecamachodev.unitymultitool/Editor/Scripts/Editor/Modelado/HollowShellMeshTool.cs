@@ -1,16 +1,17 @@
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using UnityEditor;
 using UnityEngine;
 
-namespace OptiZone
+namespace JaimeCamachoDev.Multitool.Modeling
 {
     public static class HollowShellMeshTool
     {
         private static List<GameObject> gameObjectsToModify = new List<GameObject>(); // Lista de GameObjects para modificar
         private static Transform clippingPlane; // El plano de recorte
         private enum ClipDirection { Below, Above } // Direcciones de recorte
-        private static ClipDirection clipDirection = ClipDirection.Below; // OpciÛn seleccionada del dropdown
+        private static ClipDirection clipDirection = ClipDirection.Below; // Opci√≥n seleccionada del dropdown
 
         private static Dictionary<GameObject, Mesh> originalMeshes = new Dictionary<GameObject, Mesh>(); // Diccionario para almacenar las mallas originales antes de la vista previa
 
@@ -25,13 +26,13 @@ namespace OptiZone
                 gameObjectsToModify[i] = (GameObject)EditorGUILayout.ObjectField($"Object {i + 1}", gameObjectsToModify[i], typeof(GameObject), true);
             }
 
-            // BotÛn para agregar m·s objetos a la lista
+            // Bot√≥n para agregar m√°s objetos a la lista
             if (GUILayout.Button("Add object"))
             {
                 gameObjectsToModify.Add(null);
             }
 
-            // BotÛn para eliminar el ˙ltimo objeto de la lista
+            // Bot√≥n para eliminar el √∫ltimo objeto de la lista
             if (GUILayout.Button("Remove last object"))
             {
                 if (gameObjectsToModify.Count > 0)
@@ -52,13 +53,13 @@ namespace OptiZone
 
             GUILayout.Space(20);
 
-            // BotÛn para previsualizar el recorte
+            // Bot√≥n para previsualizar el recorte
             if (GUILayout.Button("Preview clip"))
             {
                 PreviewMeshModification();
             }
 
-            // BotÛn para deshacer la vista previa y restaurar las mallas originales
+            // Bot√≥n para deshacer la vista previa y restaurar las mallas originales
             if (GUILayout.Button("Undo preview"))
             {
                 RestoreOriginalMeshes();
@@ -66,7 +67,7 @@ namespace OptiZone
 
             GUILayout.Space(20);
 
-            // BotÛn para guardar los cambios y reemplazar las mallas originales
+            // Bot√≥n para guardar los cambios y reemplazar las mallas originales
             if (GUILayout.Button("Save changes"))
             {
                 SaveModifiedMeshes();
@@ -81,28 +82,32 @@ namespace OptiZone
                 return;
             }
 
-            // Almacenamos las mallas originales solo la primera vez
-            if (originalMeshes.Count == 0)
+            // Eliminamos del backup las entradas de objetos que ya no est√°n en la lista
+            var stillTracked = gameObjectsToModify.Where(o => o != null).ToHashSet();
+            foreach (var staleKey in originalMeshes.Keys.Where(k => !stillTracked.Contains(k)).ToList())
             {
-                foreach (var obj in gameObjectsToModify)
+                originalMeshes.Remove(staleKey);
+            }
+
+            // Almacenamos la malla original de cada objeto la primera vez que aparece en la lista
+            foreach (var obj in gameObjectsToModify)
+            {
+                if (obj == null || originalMeshes.ContainsKey(obj)) continue;
+
+                var meshFilter = obj.GetComponent<MeshFilter>();
+                var skinnedMeshRenderer = obj.GetComponent<SkinnedMeshRenderer>();
+
+                if (meshFilter != null && meshFilter.sharedMesh != null)
                 {
-                    if (obj == null) continue;
-
-                    var meshFilter = obj.GetComponent<MeshFilter>();
-                    var skinnedMeshRenderer = obj.GetComponent<SkinnedMeshRenderer>();
-
-                    if (meshFilter != null && meshFilter.sharedMesh != null && !originalMeshes.ContainsKey(obj))
-                    {
-                        originalMeshes.Add(obj, meshFilter.sharedMesh);
-                    }
-                    else if (skinnedMeshRenderer != null && skinnedMeshRenderer.sharedMesh != null && !originalMeshes.ContainsKey(obj))
-                    {
-                        originalMeshes.Add(obj, skinnedMeshRenderer.sharedMesh);
-                    }
+                    originalMeshes.Add(obj, meshFilter.sharedMesh);
+                }
+                else if (skinnedMeshRenderer != null && skinnedMeshRenderer.sharedMesh != null)
+                {
+                    originalMeshes.Add(obj, skinnedMeshRenderer.sharedMesh);
                 }
             }
 
-            // Aplicamos el recorte basado en la direcciÛn seleccionada
+            // Aplicamos el recorte basado en la direcci√≥n seleccionada
             foreach (var obj in gameObjectsToModify)
             {
                 if (obj == null) continue;
@@ -113,11 +118,15 @@ namespace OptiZone
                 if (meshFilter != null && meshFilter.sharedMesh != null)
                 {
                     Mesh modifiedMesh = CreateClippedMesh(meshFilter.sharedMesh, clippingPlane, clipDirection, obj.transform);
+                    Undo.RegisterCreatedObjectUndo(modifiedMesh, "Create Hollow Shell Mesh");
+                    Undo.RecordObject(meshFilter, "Preview Hollow Shell");
                     meshFilter.sharedMesh = modifiedMesh;
                 }
                 else if (skinnedMeshRenderer != null && skinnedMeshRenderer.sharedMesh != null)
                 {
                     Mesh modifiedMesh = CreateClippedMesh(skinnedMeshRenderer.sharedMesh, clippingPlane, clipDirection, obj.transform);
+                    Undo.RegisterCreatedObjectUndo(modifiedMesh, "Create Hollow Shell Mesh");
+                    Undo.RecordObject(skinnedMeshRenderer, "Preview Hollow Shell");
                     skinnedMeshRenderer.sharedMesh = modifiedMesh;
                 }
             }
@@ -134,10 +143,12 @@ namespace OptiZone
 
                 if (meshFilter != null)
                 {
+                    Undo.RecordObject(meshFilter, "Restore Original Mesh");
                     meshFilter.sharedMesh = entry.Value;
                 }
                 else if (skinnedMeshRenderer != null)
                 {
+                    Undo.RecordObject(skinnedMeshRenderer, "Restore Original Mesh");
                     skinnedMeshRenderer.sharedMesh = entry.Value;
                 }
             }
@@ -165,12 +176,24 @@ namespace OptiZone
 
         private static void SaveMesh(Mesh modifiedMesh, GameObject obj)
         {
+            if (!originalMeshes.TryGetValue(obj, out Mesh originalMesh))
+            {
+                Debug.LogError($"No original mesh backup found for '{obj.name}'. Run \"Preview clip\" before saving.");
+                return;
+            }
+
             // Obtener la ruta de la malla original
-            string originalMeshPath = AssetDatabase.GetAssetPath(originalMeshes[obj]);
-            string directory = Path.GetDirectoryName(originalMeshPath);
+            string originalMeshPath = AssetDatabase.GetAssetPath(originalMesh);
+            string directory = !string.IsNullOrEmpty(originalMeshPath) ? Path.GetDirectoryName(originalMeshPath) : null;
+            if (string.IsNullOrEmpty(directory))
+            {
+                directory = "Assets";
+                Debug.LogWarning($"The original mesh for '{obj.name}' is not a project asset (e.g. a built-in or imported mesh). Saving the hollow shell mesh to '{directory}' instead.");
+            }
+
             string newMeshName = modifiedMesh.name + "_HollowShell.asset";
             newMeshName = newMeshName.Replace("(Clone)", "");
-            string newPath = Path.Combine(directory, newMeshName);
+            string newPath = AssetDatabase.GenerateUniqueAssetPath(Path.Combine(directory, newMeshName));
 
             // Guardar la nueva malla
             AssetDatabase.CreateAsset(modifiedMesh, newPath);
@@ -184,42 +207,42 @@ namespace OptiZone
             // Creamos una copia de la malla original
             Mesh newMesh = Object.Instantiate(originalMesh);
 
-            // Obtenemos los vÈrtices y tri·ngulos originales
+            // Obtenemos los v√©rtices y tri√°ngulos originales
             Vector3[] vertices = newMesh.vertices;
             Vector2[] uvs = newMesh.uv;
             Vector3[] normals = newMesh.normals;
             Vector4[] tangents = newMesh.tangents;
             List<int> newTriangles = new List<int>(newMesh.triangles);
 
-            // Obtener la posiciÛn y normal del plano
+            // Obtener la posici√≥n y normal del plano
             Vector3 planePos = plane.position;
             Vector3 planeNormal = plane.up;
 
-            // TransformaciÛn inversa para llevar los vÈrtices al espacio local del plano
+            // Transformaci√≥n inversa para llevar los v√©rtices al espacio local del plano
             Matrix4x4 localToWorld = meshTransform.localToWorldMatrix;
 
-            // Lista para almacenar los vÈrtices que se mantienen
+            // Lista para almacenar los v√©rtices que se mantienen
             HashSet<int> verticesToKeep = new HashSet<int>();
 
-            // Filtramos los vÈrtices y eliminamos los que est·n en la direcciÛn seleccionada
+            // Filtramos los v√©rtices y eliminamos los que est√°n en la direcci√≥n seleccionada
             for (int i = newTriangles.Count - 1; i >= 0; i -= 3)
             {
-                // Obtenemos los Ìndices de los tres vÈrtices del tri·ngulo actual
+                // Obtenemos los √≠ndices de los tres v√©rtices del tri√°ngulo actual
                 int index0 = newTriangles[i];
                 int index1 = newTriangles[i - 1];
                 int index2 = newTriangles[i - 2];
 
-                // Convertir vÈrtices al espacio local del mundo
+                // Convertir v√©rtices al espacio del mundo
                 Vector3 worldPos0 = localToWorld.MultiplyPoint3x4(vertices[index0]);
                 Vector3 worldPos1 = localToWorld.MultiplyPoint3x4(vertices[index1]);
                 Vector3 worldPos2 = localToWorld.MultiplyPoint3x4(vertices[index2]);
 
-                // Chequeamos si los vÈrtices deben eliminarse solo si los tres est·n por debajo del plano
+                // Chequeamos si los v√©rtices deben eliminarse solo si los tres est√°n por debajo del plano
                 bool remove = ShouldRemoveVertex(worldPos0, planePos, planeNormal, direction) &&
                               ShouldRemoveVertex(worldPos1, planePos, planeNormal, direction) &&
                               ShouldRemoveVertex(worldPos2, planePos, planeNormal, direction);
 
-                // Si todos los vÈrtices est·n por debajo del plano, eliminamos el tri·ngulo
+                // Si todos los v√©rtices est√°n por debajo del plano, eliminamos el tri√°ngulo
                 if (remove)
                 {
                     newTriangles.RemoveAt(i);
@@ -228,45 +251,46 @@ namespace OptiZone
                 }
                 else
                 {
-                    // Si no se elimina, agregamos estos vÈrtices a la lista de vÈrtices que se mantienen
+                    // Si no se elimina, agregamos estos v√©rtices a la lista de v√©rtices que se mantienen
                     verticesToKeep.Add(index0);
                     verticesToKeep.Add(index1);
                     verticesToKeep.Add(index2);
                 }
             }
 
-            // Crear nuevas listas de vÈrtices y datos asociados que solo contengan los vÈrtices que se utilizan
+            // Crear nuevas listas de v√©rtices y datos asociados que solo contengan los v√©rtices que se utilizan
             List<Vector3> optimizedVertices = new List<Vector3>();
             List<Vector2> optimizedUVs = new List<Vector2>();
             List<Vector3> optimizedNormals = new List<Vector3>();
             List<Vector4> optimizedTangents = new List<Vector4>();
             Dictionary<int, int> oldToNewIndexMap = new Dictionary<int, int>();
 
-            // Crear nuevos Ìndices de tri·ngulo ajustados a los nuevos vÈrtices
+            // Crear nuevos √≠ndices de tri√°ngulo ajustados a los nuevos v√©rtices
             List<int> optimizedTriangles = new List<int>();
 
             int newIndex = 0;
             foreach (int oldIndex in verticesToKeep)
             {
-                // Copiamos los datos de los vÈrtices, uvs, normales y tangentes de los vÈrtices que se mantienen
+                // Copiamos los datos de los v√©rtices, uvs, normales y tangentes de los v√©rtices que se mantienen
                 optimizedVertices.Add(vertices[oldIndex]);
                 if (uvs.Length > 0) optimizedUVs.Add(uvs[oldIndex]);
                 if (normals.Length > 0) optimizedNormals.Add(normals[oldIndex]);
                 if (tangents.Length > 0) optimizedTangents.Add(tangents[oldIndex]);
 
-                // Mapear los Ìndices antiguos a los nuevos
+                // Mapear los √≠ndices antiguos a los nuevos
                 oldToNewIndexMap[oldIndex] = newIndex;
                 newIndex++;
             }
 
-            // Rehacer los tri·ngulos utilizando el nuevo mapeo de Ìndices
+            // Rehacer los tri√°ngulos utilizando el nuevo mapeo de √≠ndices
             for (int i = 0; i < newTriangles.Count; i++)
             {
                 optimizedTriangles.Add(oldToNewIndexMap[newTriangles[i]]);
             }
 
-            // Asignar los nuevos vÈrtices, tri·ngulos, UVs, etc. a la nueva malla
+            // Asignar los nuevos v√©rtices, tri√°ngulos, UVs, etc. a la nueva malla
             newMesh.Clear();
+            newMesh.indexFormat = optimizedVertices.Count > 65535 ? UnityEngine.Rendering.IndexFormat.UInt32 : UnityEngine.Rendering.IndexFormat.UInt16;
             newMesh.vertices = optimizedVertices.ToArray();
             newMesh.triangles = optimizedTriangles.ToArray();
             if (optimizedUVs.Count > 0) newMesh.uv = optimizedUVs.ToArray();
@@ -282,7 +306,7 @@ namespace OptiZone
 
         private static bool ShouldRemoveVertex(Vector3 vertex, Vector3 planePos, Vector3 planeNormal, ClipDirection direction)
         {
-            // Proyectamos la posiciÛn del vÈrtice en el plano y determinamos si eliminarlo en funciÛn de la direcciÛn de recorte
+            // Proyectamos la posici√≥n del v√©rtice respecto al plano y determinamos si eliminarlo seg√∫n la direcci√≥n de recorte
             Vector3 relativePos = vertex - planePos;
 
             switch (direction)

@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEditor;
 
-namespace VZ_Optizone
+namespace JaimeCamachoDev.Multitool.Modeling
 {
     public static class UV2GeneratorTool
     {
@@ -14,7 +14,12 @@ namespace VZ_Optizone
             // Campo para arrastrar y soltar la malla
             selectedMesh = (Mesh)EditorGUILayout.ObjectField("Malla para Generar UV2", selectedMesh, typeof(Mesh), false);
 
-            // Botón para generar el UV2
+            if (selectedMesh != null && AssetImporter.GetAtPath(AssetDatabase.GetAssetPath(selectedMesh)) is ModelImporter)
+            {
+                EditorGUILayout.HelpBox("Esta malla proviene de un modelo importado (FBX/OBJ/etc). Los cambios se perderÃ¡n al reimportar el modelo; considera duplicar la malla como un asset independiente antes de generar el UV2.", MessageType.Warning);
+            }
+
+            // BotÃ³n para generar el UV2
             if (GUILayout.Button("Generar UV2"))
             {
                 if (selectedMesh != null)
@@ -37,13 +42,14 @@ namespace VZ_Optizone
             string path = AssetDatabase.GetAssetPath(selectedMesh);
             if (!string.IsNullOrEmpty(path))
             {
+                EditorUtility.SetDirty(selectedMesh);
                 AssetDatabase.SaveAssets();
                 AssetDatabase.Refresh();
                 Debug.Log("UV2 generado y guardado para: " + selectedMesh.name);
             }
             else
             {
-                Debug.LogError("Error al guardar UV2. Asegúrate de que la malla esté guardada como un asset.");
+                Debug.LogError("Error al guardar UV2. AsegÃºrate de que la malla estÃ© guardada como un asset.");
             }
         }
     }

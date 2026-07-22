@@ -3,26 +3,31 @@ using UnityEditor;
 using System.Collections.Generic;
 using System.IO;
 
-namespace VZ_Optizone
+namespace JaimeCamachoDev.Multitool.Modeling
 {
     public static class MultimaterialMeshSplitterTool
     {
-        private static Mesh meshMultiMat; // meshMultiMat para dividir en submeshes
-        private static Object destinationFolder; // Carpeta donde se guardarán los submeshes
+        private static Mesh meshMultiMat; // Mesh a dividir en submeshes
+        private static Object destinationFolder; // Carpeta donde se guardarÃ¡n los submeshes
 
         public static void DrawTool()
         {
             GUILayout.Label("Separar Submeshes por Material", EditorStyles.boldLabel);
 
-            // Seleccionar el meshMultiMat
-            meshMultiMat = (Mesh)EditorGUILayout.ObjectField("Skinned Mesh Renderer", meshMultiMat, typeof(Mesh), true);
+            // Seleccionar la malla
+            meshMultiMat = (Mesh)EditorGUILayout.ObjectField("Mesh", meshMultiMat, typeof(Mesh), true);
 
             // Seleccionar la carpeta de destino
             destinationFolder = EditorGUILayout.ObjectField("Carpeta de Destino", destinationFolder, typeof(Object), false);
 
+            if (meshMultiMat != null && meshMultiMat.blendShapeCount > 0)
+            {
+                EditorGUILayout.HelpBox("Esta malla tiene blend shapes. Los submeshes generados no los incluirÃ¡n.", MessageType.Warning);
+            }
+
             GUILayout.Space(20);
 
-            // Botón para dividir y guardar los submeshes
+            // BotÃ³n para dividir y guardar los submeshes
             if (GUILayout.Button("Dividir y Guardar Submeshes"))
             {
                 if (meshMultiMat != null && destinationFolder != null)
@@ -31,7 +36,7 @@ namespace VZ_Optizone
                 }
                 else
                 {
-                    Debug.LogWarning("Por favor, selecciona un Skinned Mesh Renderer y una carpeta de destino.");
+                    Debug.LogWarning("Por favor, selecciona una Mesh y una carpeta de destino.");
                 }
             }
         }
@@ -41,7 +46,7 @@ namespace VZ_Optizone
             string path = AssetDatabase.GetAssetPath(destinationFolder);
             if (!AssetDatabase.IsValidFolder(path))
             {
-                Debug.LogError("Carpeta de destino inválida.");
+                Debug.LogError("Carpeta de destino invÃ¡lida.");
                 return;
             }
 
@@ -53,11 +58,16 @@ namespace VZ_Optizone
                 return;
             }
 
+            UnityEngine.Rendering.IndexFormat indexFormat = originalMesh.vertexCount > 65535
+                ? UnityEngine.Rendering.IndexFormat.UInt32
+                : UnityEngine.Rendering.IndexFormat.UInt16;
+
             for (int i = 0; i < originalMesh.subMeshCount; i++)
             {
                 Mesh submesh = new Mesh
                 {
                     name = originalMesh.name + "_Submesh_" + (i + 1),
+                    indexFormat = indexFormat,
                     vertices = originalMesh.vertices,
                     normals = originalMesh.normals,
                     tangents = originalMesh.tangents,
@@ -94,10 +104,10 @@ namespace VZ_Optizone
 
         private static void CenterUVsHorizontally(Mesh mesh, Vector2[] uvs)
         {
-            // Obtener los índices del submesh
+            // Obtener los Ã­ndices del submesh
             int[] indices = mesh.GetIndices(0);
 
-            // Calcular los valores mínimos y máximos de UV en los vértices de este submesh solo en el eje X
+            // Calcular los valores mÃ­nimos y mÃ¡ximos de UV en los vÃ©rtices de este submesh solo en el eje X
             float minU = float.MaxValue;
             float maxU = float.MinValue;
 
@@ -111,7 +121,7 @@ namespace VZ_Optizone
             // Calcular el centro de las UVs en el eje X
             float uCenter = (minU + maxU) / 2f;
 
-            // Desplazar UVs para que el centro esté en X = 0.5, sin modificar Y
+            // Desplazar UVs para que el centro estÃ© en X = 0.5, sin modificar Y
             float offsetX = 0.5f - uCenter;
 
             for (int i = 0; i < uvs.Length; i++)

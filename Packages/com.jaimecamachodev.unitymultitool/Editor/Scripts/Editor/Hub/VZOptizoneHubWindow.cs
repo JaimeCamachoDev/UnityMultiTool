@@ -1,7 +1,6 @@
 using UnityEngine;
 using UnityEditor;
 using System.Collections.Generic;
-using OptiZone;
 using Optizone;
 using VZ_Optizone;
 using JaimeCamachoDev.Multitool.Modeling;
@@ -290,7 +289,7 @@ namespace VZOptizone
                     UV2GeneratorTool.DrawTool();
                     break;
                 case "Move UV inside grid":
-                    UVAdjusterToolOpti.DrawTool();
+                    UVAdjusterTool.DrawTool();
                     break;
                 case "Bake pose":
                     BakeMeshTool.DrawTool();
