@@ -27,6 +27,7 @@ namespace JaimeCamachoDev.Multitool
         private readonly Dictionary<Category, List<string>> categoryTools = new();
         private readonly Dictionary<string, string> toolDescriptions = new();
         private readonly Dictionary<string, Action> toolDrawers = new();
+        private readonly Dictionary<string, Func<VisualElement>> toolBuilders = new();
         private readonly Dictionary<string, Action> toolActivations = new();
         private readonly Dictionary<string, Action> toolDeactivations = new();
 
@@ -158,6 +159,7 @@ namespace JaimeCamachoDev.Multitool
         private void BuildToolActions()
         {
             toolDrawers.Clear();
+            toolBuilders.Clear();
             toolActivations.Clear();
             toolDeactivations.Clear();
 
@@ -177,31 +179,19 @@ namespace JaimeCamachoDev.Multitool
 
             toolDrawers["Lightmap checker"] = LightmapCheckerTool.DrawTool;
             toolDrawers["Renamer"] = RenameTool.DrawTool;
-            toolDrawers["Hollow shell"] = HollowShellMeshTool.DrawTool;
-            toolDrawers["Multi material Finder"] = MultiMaterialFinderTool.DrawTool;
-            toolDrawers["Multi material splitter"] = MultimaterialMeshSplitterTool.DrawTool;
-            toolDrawers["Merge mesh and create atlas"] = MeshAtlasBakerTool.DrawTool;
-            toolDrawers["Generate mesh uv lightmaps"] = UV2GeneratorTool.DrawTool;
-            toolDrawers["Move UV inside grid"] = UVAdjusterTool.DrawTool;
-            toolDrawers["Vertex ID Display"] = VertexIDDisplayerTool.DrawTool;
-            toolDrawers["Micro triangle detector"] = MicroTrianglesDetectorTool.DrawTool;
-            toolDrawers["Advanced mesh combiner"] = MeshCombinerTool.DrawTool;
-            toolDrawers["Pivot mover & aligner"] = PivotAdjusterTool.DrawTool;
-            toolDrawers["Reset XForm"] = ResetTransformTool.DrawTool;
-            toolDrawers["Remove not visible vertex"] = VertexOptimizationTool.DrawTool;
-            toolDrawers["Recalculate Mesh Bounds"] = () =>
-            {
-                if (Selection.activeGameObject != null)
-                {
-                    MeshFilter meshFilter = Selection.activeGameObject.GetComponent<MeshFilter>();
-                    if (meshFilter != null)
-                    {
-                        RecalculateMeshBoundsTool.SetTarget(meshFilter);
-                    }
-                }
-
-                RecalculateMeshBoundsTool.DrawTool();
-            };
+            toolBuilders["Hollow shell"] = HollowShellMeshTool.CreateGUI;
+            toolBuilders["Multi material Finder"] = MultiMaterialFinderTool.CreateGUI;
+            toolBuilders["Multi material splitter"] = MultimaterialMeshSplitterTool.CreateGUI;
+            toolBuilders["Merge mesh and create atlas"] = MeshAtlasBakerTool.CreateGUI;
+            toolBuilders["Generate mesh uv lightmaps"] = UV2GeneratorTool.CreateGUI;
+            toolBuilders["Move UV inside grid"] = UVAdjusterTool.CreateGUI;
+            toolBuilders["Vertex ID Display"] = VertexIDDisplayerTool.CreateGUI;
+            toolBuilders["Micro triangle detector"] = MicroTrianglesDetectorTool.CreateGUI;
+            toolBuilders["Advanced mesh combiner"] = MeshCombinerTool.CreateGUI;
+            toolBuilders["Pivot mover & aligner"] = PivotAdjusterTool.CreateGUI;
+            toolBuilders["Reset XForm"] = ResetTransformTool.CreateGUI;
+            toolBuilders["Remove not visible vertex"] = VertexOptimizationTool.CreateGUI;
+            toolBuilders["Recalculate Mesh Bounds"] = RecalculateMeshBoundsTool.CreateGUI;
 
             toolActivations["Recalculate Mesh Bounds"] = RecalculateMeshBoundsTool.EnableSceneView;
             toolDeactivations["Recalculate Mesh Bounds"] = RecalculateMeshBoundsTool.DisableSceneView;
@@ -221,8 +211,10 @@ namespace JaimeCamachoDev.Multitool
 
         // ------------------------------------------------------------------
         // UI Toolkit shell — cards/buttons match the look used elsewhere
-        // (VzFolders' UI Toolkit windows). Each tool's own DrawTool() stays
-        // IMGUI and is embedded via IMGUIContainer when activated.
+        // (VzFolders' UI Toolkit windows). Tools are being migrated one by one
+        // from IMGUI (DrawTool(), wrapped in an IMGUIContainer) to native UI
+        // Toolkit (CreateGUI(), returning a VisualElement tree directly) — see
+        // toolBuilders vs. the legacy toolDrawers fallback in BuildActiveToolView.
         // ------------------------------------------------------------------
 
         private void CreateGUI()
@@ -400,7 +392,7 @@ namespace JaimeCamachoDev.Multitool
 
         private VisualElement BuildToolCard(string toolName)
         {
-            bool toolAvailable = toolDrawers.ContainsKey(toolName);
+            bool toolAvailable = toolDrawers.ContainsKey(toolName) || toolBuilders.ContainsKey(toolName);
 
             var card = new MTUIPanel(toolName);
             card.TitleLabel.style.fontSize = 13;
@@ -450,13 +442,21 @@ namespace JaimeCamachoDev.Multitool
             container.Add(headerRow);
 
             var scroll = new ScrollView { style = { flexGrow = 1 } };
-            scroll.Add(new IMGUIContainer(() =>
+
+            if (toolBuilders.TryGetValue(activeTool, out Func<VisualElement> buildTool))
             {
-                if (toolDrawers.TryGetValue(activeTool, out Action drawAction))
-                    drawAction.Invoke();
-                else
-                    EditorGUILayout.HelpBox("La herramienta seleccionada todavía no forma parte de la nueva experiencia Multitool.", MessageType.Warning);
-            }));
+                scroll.Add(buildTool.Invoke());
+            }
+            else if (toolDrawers.TryGetValue(activeTool, out Action drawAction))
+            {
+                scroll.Add(new IMGUIContainer(() => drawAction.Invoke()));
+            }
+            else
+            {
+                scroll.Add(new IMGUIContainer(() =>
+                    EditorGUILayout.HelpBox("La herramienta seleccionada todavía no forma parte de la nueva experiencia Multitool.", MessageType.Warning)));
+            }
+
             container.Add(scroll);
 
             return container;

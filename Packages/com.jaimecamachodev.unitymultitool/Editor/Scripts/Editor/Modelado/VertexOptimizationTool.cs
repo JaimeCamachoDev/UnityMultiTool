@@ -1,8 +1,10 @@
 using System.Collections.Generic;
 using System.IO;
 using UnityEditor;
+using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.UIElements;
 
 namespace JaimeCamachoDev.Multitool.Modeling
 {
@@ -47,68 +49,156 @@ namespace JaimeCamachoDev.Multitool.Modeling
             public Vector3 C;
         }
 
-        public static void DrawTool()
+        public static VisualElement CreateGUI()
         {
-            GUILayout.Label("Remove Hidden Faces", EditorStyles.boldLabel);
-            EditorGUILayout.HelpBox(
+            var root = new VisualElement();
+
+            root.Add(new Label("Remove Hidden Faces") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginBottom = 6 } });
+            root.Add(new HelpBox(
                 "Detecta y elimina caras que quedan completamente ocultas tras otra geometría (por ejemplo, caras internas entre piezas modulares unidas) muestreando rayos por cara. Es una heurística: revisa el resultado en la Scene View antes de guardar los cambios.",
-                MessageType.Info);
+                HelpBoxMessageType.Info));
 
-            GUILayout.Label("1. Objetos a optimizar", EditorStyles.boldLabel);
-            for (int i = 0; i < targetObjects.Count; i++)
+            var analyzeStatusContainer = new VisualElement { style = { marginTop = 10 } };
+            var resultsContainer = new VisualElement { style = { marginTop = 10 } };
+
+            Button analyzeButton = null;
+
+            void RefreshAnalyzeStatus()
             {
-                targetObjects[i] = (GameObject)EditorGUILayout.ObjectField($"Objeto {i + 1}", targetObjects[i], typeof(GameObject), true);
-            }
-            using (new EditorGUILayout.HorizontalScope())
-            {
-                if (GUILayout.Button("Añadir objeto"))
+                analyzeStatusContainer.Clear();
+
+                bool hasValidTarget = false;
+                foreach (GameObject go in targetObjects)
                 {
-                    targetObjects.Add(null);
-                }
-                using (new EditorGUI.DisabledScope(targetObjects.Count == 0))
-                {
-                    if (GUILayout.Button("Quitar último"))
+                    if (go != null)
                     {
-                        targetObjects.RemoveAt(targetObjects.Count - 1);
+                        hasValidTarget = true;
+                        break;
                     }
                 }
-            }
 
-            GUILayout.Space(10);
-
-            GUILayout.Label("2. Oclusores", EditorStyles.boldLabel);
-            includeTargetsAsOccluders = EditorGUILayout.ToggleLeft("Usar los propios objetos a optimizar como oclusores entre sí", includeTargetsAsOccluders);
-            for (int i = 0; i < extraOccluders.Count; i++)
-            {
-                extraOccluders[i] = (GameObject)EditorGUILayout.ObjectField($"Oclusor extra {i + 1}", extraOccluders[i], typeof(GameObject), true);
-            }
-            using (new EditorGUILayout.HorizontalScope())
-            {
-                if (GUILayout.Button("Añadir oclusor"))
+                if (!hasValidTarget)
                 {
-                    extraOccluders.Add(null);
+                    analyzeStatusContainer.Add(new HelpBox("Arrastra al menos un objeto en el paso 1 para poder analizar su visibilidad.", HelpBoxMessageType.Info));
                 }
-                using (new EditorGUI.DisabledScope(extraOccluders.Count == 0))
+
+                analyzeButton.SetEnabled(hasValidTarget);
+            }
+
+            root.Add(new Label("1. Objetos a optimizar") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginTop = 10 } });
+            var targetListContainer = new VisualElement();
+            root.Add(targetListContainer);
+
+            void RefreshTargetList()
+            {
+                targetListContainer.Clear();
+                for (int i = 0; i < targetObjects.Count; i++)
                 {
-                    if (GUILayout.Button("Quitar último oclusor"))
+                    int index = i;
+                    var field = new ObjectField($"Objeto {i + 1}") { objectType = typeof(GameObject), allowSceneObjects = true, value = targetObjects[index] };
+                    field.RegisterValueChangedCallback(evt =>
                     {
-                        extraOccluders.RemoveAt(extraOccluders.Count - 1);
-                    }
+                        targetObjects[index] = evt.newValue as GameObject;
+                        RefreshAnalyzeStatus();
+                    });
+                    targetListContainer.Add(field);
                 }
             }
 
-            GUILayout.Space(10);
+            var targetButtonsRow = new VisualElement { style = { flexDirection = FlexDirection.Row, marginTop = 4 } };
+            targetButtonsRow.Add(new Button(() =>
+            {
+                targetObjects.Add(null);
+                RefreshTargetList();
+                RefreshAnalyzeStatus();
+            })
+            { text = "Añadir objeto" });
 
-            GUILayout.Label("3. Muestreo", EditorStyles.boldLabel);
-            sampleQuality = (SampleQuality)EditorGUILayout.EnumPopup("Calidad", sampleQuality);
-            showHiddenFacesInSceneView = EditorGUILayout.ToggleLeft("Resaltar caras ocultas en la Scene View", showHiddenFacesInSceneView);
+            var removeTargetButton = new Button(() =>
+            {
+                if (targetObjects.Count > 0)
+                {
+                    targetObjects.RemoveAt(targetObjects.Count - 1);
+                    RefreshTargetList();
+                    RefreshAnalyzeStatus();
+                }
+            })
+            { text = "Quitar último", style = { marginLeft = 6 } };
+            targetButtonsRow.Add(removeTargetButton);
+            root.Add(targetButtonsRow);
 
-            GUILayout.Space(10);
+            root.Add(new Label("2. Oclusores") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginTop = 10 } });
+            var includeTargetsToggle = new Toggle("Usar los propios objetos a optimizar como oclusores entre sí") { value = includeTargetsAsOccluders };
+            includeTargetsToggle.RegisterValueChangedCallback(evt => includeTargetsAsOccluders = evt.newValue);
+            root.Add(includeTargetsToggle);
 
-            if (GUILayout.Button("Analizar visibilidad"))
+            var occluderListContainer = new VisualElement();
+            root.Add(occluderListContainer);
+
+            void RefreshOccluderList()
+            {
+                occluderListContainer.Clear();
+                for (int i = 0; i < extraOccluders.Count; i++)
+                {
+                    int index = i;
+                    var field = new ObjectField($"Oclusor extra {i + 1}") { objectType = typeof(GameObject), allowSceneObjects = true, value = extraOccluders[index] };
+                    field.RegisterValueChangedCallback(evt => extraOccluders[index] = evt.newValue as GameObject);
+                    occluderListContainer.Add(field);
+                }
+            }
+
+            var occluderButtonsRow = new VisualElement { style = { flexDirection = FlexDirection.Row, marginTop = 4 } };
+            occluderButtonsRow.Add(new Button(() =>
+            {
+                extraOccluders.Add(null);
+                RefreshOccluderList();
+            })
+            { text = "Añadir oclusor" });
+
+            occluderButtonsRow.Add(new Button(() =>
+            {
+                if (extraOccluders.Count > 0)
+                {
+                    extraOccluders.RemoveAt(extraOccluders.Count - 1);
+                    RefreshOccluderList();
+                }
+            })
+            { text = "Quitar último oclusor", style = { marginLeft = 6 } });
+            root.Add(occluderButtonsRow);
+
+            root.Add(new Label("3. Muestreo") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginTop = 10 } });
+            var qualityField = new EnumField("Calidad", sampleQuality);
+            qualityField.RegisterValueChangedCallback(evt => sampleQuality = (SampleQuality)evt.newValue);
+            root.Add(qualityField);
+
+            var highlightToggle = new Toggle("Resaltar caras ocultas en la Scene View") { value = showHiddenFacesInSceneView };
+            highlightToggle.RegisterValueChangedCallback(evt => showHiddenFacesInSceneView = evt.newValue);
+            root.Add(highlightToggle);
+
+            root.Add(analyzeStatusContainer);
+
+            analyzeButton = new Button(() =>
             {
                 Analyze();
-            }
+                RefreshAnalyzeStatus();
+                RefreshResults(resultsContainer);
+            })
+            { text = "Analizar visibilidad", style = { marginTop = 4 } };
+            root.Add(analyzeButton);
+
+            root.Add(resultsContainer);
+
+            RefreshTargetList();
+            RefreshOccluderList();
+            RefreshAnalyzeStatus();
+            RefreshResults(resultsContainer);
+
+            return root;
+        }
+
+        private static void RefreshResults(VisualElement container)
+        {
+            container.Clear();
 
             if (analyses.Count == 0)
             {
@@ -123,36 +213,45 @@ namespace JaimeCamachoDev.Multitool.Modeling
                 totalHidden += analysis.HiddenCount;
             }
 
-            GUILayout.Space(10);
-            EditorGUILayout.HelpBox($"{totalHidden} de {totalFaces} caras analizadas se consideran completamente ocultas.", totalHidden > 0 ? MessageType.Info : MessageType.None);
+            container.Add(new HelpBox($"{totalHidden} de {totalFaces} caras analizadas se consideran completamente ocultas.", totalHidden > 0 ? HelpBoxMessageType.Info : HelpBoxMessageType.None));
 
             foreach (TargetAnalysis analysis in analyses)
             {
                 string label = analysis.GameObject != null ? analysis.GameObject.name : "(objeto eliminado)";
-                EditorGUILayout.LabelField(label, $"{analysis.HiddenCount}/{analysis.FaceCount} caras ocultas");
+                var row = new VisualElement { style = { flexDirection = FlexDirection.Row, justifyContent = Justify.SpaceBetween } };
+                row.Add(new Label(label));
+                row.Add(new Label($"{analysis.HiddenCount}/{analysis.FaceCount} caras ocultas"));
+                container.Add(row);
             }
 
-            GUILayout.Space(10);
+            var saveToggle = new Toggle("Guardar mesh resultante como asset") { value = saveAsAsset, style = { marginTop = 10 } };
+            container.Add(saveToggle);
 
-            saveAsAsset = EditorGUILayout.ToggleLeft("Guardar mesh resultante como asset", saveAsAsset);
-            using (new EditorGUI.DisabledScope(!saveAsAsset))
+            var folderField = new ObjectField("Carpeta destino") { objectType = typeof(DefaultAsset), allowSceneObjects = false, value = outputFolder, style = { marginLeft = 15 } };
+            var folderHelpBox = new HelpBox("Si no se asigna carpeta se usará la carpeta del mesh original (o 'Assets/' si no es un asset).", HelpBoxMessageType.None) { style = { marginLeft = 15 } };
+            folderHelpBox.style.display = outputFolder == null ? DisplayStyle.Flex : DisplayStyle.None;
+            folderField.SetEnabled(saveAsAsset);
+            folderField.RegisterValueChangedCallback(evt =>
             {
-                EditorGUI.indentLevel++;
-                outputFolder = (DefaultAsset)EditorGUILayout.ObjectField("Carpeta destino", outputFolder, typeof(DefaultAsset), false);
-                if (outputFolder == null)
-                {
-                    EditorGUILayout.HelpBox("Si no se asigna carpeta se usará la carpeta del mesh original (o 'Assets/' si no es un asset).", MessageType.None);
-                }
-                EditorGUI.indentLevel--;
-            }
-
-            using (new EditorGUI.DisabledScope(totalHidden == 0))
+                outputFolder = evt.newValue as DefaultAsset;
+                folderHelpBox.style.display = outputFolder == null ? DisplayStyle.Flex : DisplayStyle.None;
+            });
+            saveToggle.RegisterValueChangedCallback(evt =>
             {
-                if (GUILayout.Button("Eliminar caras ocultas"))
-                {
-                    ApplyRemoval();
-                }
-            }
+                saveAsAsset = evt.newValue;
+                folderField.SetEnabled(saveAsAsset);
+            });
+            container.Add(folderField);
+            container.Add(folderHelpBox);
+
+            var removeButton = new Button(() =>
+            {
+                ApplyRemoval();
+                RefreshResults(container);
+            })
+            { text = "Eliminar caras ocultas", style = { marginTop = 10 } };
+            removeButton.SetEnabled(totalHidden > 0);
+            container.Add(removeButton);
         }
 
         private static int GetSampleCount(SampleQuality quality)

@@ -1,9 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using JaimeCamachoDev.Multitool.UI;
 using UnityEditor;
+using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.UIElements;
 
 namespace JaimeCamachoDev.Multitool.Modeling
 {
@@ -19,13 +22,11 @@ namespace JaimeCamachoDev.Multitool.Modeling
         private static bool saveMeshAsset = true;
         private static string outputName = "CombinedAtlas";
         private static DefaultAsset outputFolder;
-        private static Vector2 materialScroll;
 
         private static bool useCustomAtlasWorkflow;
         private static bool showCustomAtlasBuilder = true;
         private static int customAtlasImageCount = 1;
         private static readonly List<Texture2D> customAtlasSourceTextures = new List<Texture2D>();
-        private static readonly string[] customAtlasResolutionLabels = { "256", "512", "1024", "2048" };
         private static readonly int[] customAtlasResolutionSizes = { 256, 512, 1024, 2048 };
         private static int customAtlasCellResolution = 1024;
         private static Texture2D customGeneratedAtlas;
@@ -48,330 +49,334 @@ namespace JaimeCamachoDev.Multitool.Modeling
         };
         private static readonly List<CustomUvPreviewEntry> customUvPreviewEntries = new List<CustomUvPreviewEntry>();
         private static int customUvPreviewActiveIndex = -1;
-        private static Vector2 customUvPreviewListScroll;
         private static string customStatusMessage = string.Empty;
         private static MessageType customStatusType = MessageType.Info;
 
-        public static void DrawTool()
+        private static HelpBoxMessageType ToHelpBoxType(MessageType type)
         {
-            GUILayout.Label("Atlasizador de materiales", EditorStyles.boldLabel);
-            EditorGUILayout.HelpBox("Convierte mallas combinadas con múltiples materiales en un único material con atlas.", MessageType.Info);
-
-            if (Selection.gameObjects == null || Selection.gameObjects.Length == 0)
+            switch (type)
             {
-                EditorGUILayout.HelpBox("Selecciona al menos un objeto con MeshRenderer para continuar.", MessageType.Warning);
-                return;
-            }
-
-            SelectionContext context = BuildSelectionContext(out string selectionMessage, out MessageType messageType);
-            if (context == null)
-            {
-                EditorGUILayout.HelpBox(selectionMessage, messageType);
-                return;
-            }
-
-            Material[] materials = context.MaterialArray;
-            if (materials == null || materials.Length == 0)
-            {
-                EditorGUILayout.HelpBox("No se detectaron materiales en los MeshRenderers seleccionados.", MessageType.Warning);
-                return;
-            }
-
-            if (!context.RequiresTemporaryMesh)
-            {
-                Mesh mesh = context.TargetFilter.sharedMesh;
-                if (mesh == null)
-                {
-                    EditorGUILayout.HelpBox("El MeshFilter no tiene mesh asignado.", MessageType.Warning);
-                    return;
-                }
-
-                if (mesh.uv == null || mesh.uv.Length == 0)
-                {
-                    EditorGUILayout.HelpBox("La malla necesita UVs en el canal principal para generar el atlas.", MessageType.Error);
-                    return;
-                }
-
-                if (mesh.subMeshCount != materials.Length)
-                {
-                    EditorGUILayout.HelpBox("El número de submeshes no coincide con la cantidad de materiales. El resultado puede no ser el esperado.", MessageType.Warning);
-                }
-            }
-            else if (context.SubMeshCount == 0)
-            {
-                EditorGUILayout.HelpBox("No se detectaron submeshes válidos en la selección.", MessageType.Warning);
-                return;
-            }
-
-            EditorGUILayout.LabelField("MeshRenderers detectados", context.Renderers.Count.ToString());
-            EditorGUILayout.LabelField("Submeshes combinados", context.SubMeshCount.ToString());
-            EditorGUILayout.LabelField("Materiales totales", materials.Length.ToString());
-            EditorGUILayout.LabelField("Materiales únicos", context.UniqueMaterialCount.ToString());
-            EditorGUILayout.LabelField("Vértices estimados", context.VertexCount.ToString());
-
-            if (!HasMultipleMaterials(materials) && context.SubMeshCount <= 1)
-            {
-                EditorGUILayout.HelpBox("La selección ya utiliza un único material.", MessageType.Info);
-            }
-
-            if (context.RequiresTemporaryMesh)
-            {
-                string infoMessage = $"Se combinarán temporalmente {context.Renderers.Count} MeshRenderers y el resultado se aplicará al objeto activo '{context.TargetRenderer.name}'.";
-                EditorGUILayout.HelpBox(infoMessage, MessageType.Info);
-
-                using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
-                {
-                    EditorGUILayout.LabelField("Objetos incluidos:");
-                    EditorGUI.indentLevel++;
-                    List<string> samples = context.GetRendererSamples();
-                    for (int i = 0; i < samples.Count; i++)
-                    {
-                        EditorGUILayout.LabelField("• " + samples[i], EditorStyles.miniLabel);
-                    }
-
-                    if (context.Renderers.Count > samples.Count)
-                    {
-                        EditorGUILayout.LabelField($"…{context.Renderers.Count - samples.Count} adicionales", EditorStyles.miniLabel);
-                    }
-                    EditorGUI.indentLevel--;
-                }
-            }
-
-            if (context.Skipped.Count > 0)
-            {
-                using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
-                {
-                    EditorGUILayout.LabelField("Omitidos:");
-                    EditorGUI.indentLevel++;
-                    foreach (string skipped in context.Skipped)
-                    {
-                        EditorGUILayout.LabelField("• " + skipped, EditorStyles.miniLabel);
-                    }
-                    EditorGUI.indentLevel--;
-                }
-            }
-
-            materialScroll = EditorGUILayout.BeginScrollView(materialScroll, GUILayout.Height(120f));
-            for (int i = 0; i < materials.Length; i++)
-            {
-                Material material = materials[i];
-                string matName = material != null ? material.name : "(Material null)";
-                string textureInfo = "Sin textura";
-                if (material != null)
-                {
-                    Texture baseMap = material.HasProperty("_BaseMap") ? material.GetTexture("_BaseMap") : null;
-                    if (baseMap == null)
-                    {
-                        baseMap = material.mainTexture;
-                    }
-                    if (baseMap != null)
-                    {
-                        textureInfo = $"{baseMap.width}x{baseMap.height}";
-                    }
-                }
-
-                EditorGUILayout.LabelField($"• Submesh {i + 1}: {matName} ({textureInfo})", EditorStyles.miniLabel);
-            }
-            EditorGUILayout.EndScrollView();
-
-            GUILayout.Space(6f);
-
-            atlasSizeIndex = GUILayout.SelectionGrid(atlasSizeIndex, atlasSizeLabels, atlasSizeLabels.Length, EditorStyles.miniButton);
-            atlasSizeIndex = Mathf.Clamp(atlasSizeIndex, 0, atlasSizes.Length - 1);
-            atlasPadding = EditorGUILayout.IntSlider("Padding", atlasPadding, 0, 64);
-
-            saveAtlasTexture = EditorGUILayout.ToggleLeft("Guardar atlas como PNG", saveAtlasTexture);
-            using (new EditorGUI.DisabledScope(!saveAtlasTexture))
-            {
-                bool newMaterialAsset = EditorGUILayout.ToggleLeft("Guardar material como asset", saveMaterialAsset);
-                saveMaterialAsset = saveAtlasTexture ? newMaterialAsset : false;
-            }
-            saveMeshAsset = EditorGUILayout.ToggleLeft("Guardar malla resultante como asset", saveMeshAsset);
-
-            using (new EditorGUI.IndentLevelScope())
-            {
-                outputName = EditorGUILayout.TextField("Nombre base", outputName);
-                using (new EditorGUI.DisabledScope(!(saveAtlasTexture || saveMaterialAsset || saveMeshAsset)))
-                {
-                    outputFolder = (DefaultAsset)EditorGUILayout.ObjectField("Carpeta destino", outputFolder, typeof(DefaultAsset), false);
-                }
-                if (outputFolder == null)
-                {
-                    EditorGUILayout.HelpBox("Si no se asigna carpeta se usará 'Assets/'.", MessageType.Info);
-                }
-            }
-
-            DrawCustomAtlasWorkflowControls(context);
-
-            if (!saveAtlasTexture)
-            {
-                EditorGUILayout.HelpBox("El atlas y el material permanecerán en memoria hasta que guardes la escena o exportes manualmente.", MessageType.Info);
-            }
-
-            GUILayout.Space(10f);
-
-            bool canGenerateAtlas = HasMultipleMaterials(materials) || context.SubMeshCount > 1;
-
-            if (!canGenerateAtlas)
-            {
-                EditorGUILayout.HelpBox("Se requieren al menos dos materiales o submeshes para generar el atlas.", MessageType.Info);
-            }
-
-            using (new EditorGUI.DisabledScope(!canGenerateAtlas))
-            {
-                if (GUILayout.Button("Generar atlas y material único"))
-                {
-                    ConvertSelection(context);
-                }
+                case MessageType.Info:
+                    return HelpBoxMessageType.Info;
+                case MessageType.Warning:
+                    return HelpBoxMessageType.Warning;
+                case MessageType.Error:
+                    return HelpBoxMessageType.Error;
+                default:
+                    return HelpBoxMessageType.None;
             }
         }
 
-        private static void DrawCustomAtlasWorkflowControls(SelectionContext context)
+        private static void AddInfoRow(VisualElement parent, string label, string value)
         {
-            GUILayout.Space(8f);
-            EditorGUILayout.LabelField("Flujo manual de atlas (VAT UV Visual)", EditorStyles.boldLabel);
-            bool newToggle = EditorGUILayout.ToggleLeft("Usar constructor manual de atlas y transformaciones UV", useCustomAtlasWorkflow);
-            if (newToggle != useCustomAtlasWorkflow)
+            var row = new VisualElement { style = { flexDirection = FlexDirection.Row, justifyContent = Justify.SpaceBetween } };
+            row.Add(new Label(label));
+            row.Add(new Label(value));
+            parent.Add(row);
+        }
+
+        private static VisualElement CreateBorderedBox()
+        {
+            var box = new VisualElement();
+            Color borderColor = new Color(0.3f, 0.3f, 0.3f);
+            box.style.borderTopWidth = 1;
+            box.style.borderBottomWidth = 1;
+            box.style.borderLeftWidth = 1;
+            box.style.borderRightWidth = 1;
+            box.style.borderTopColor = borderColor;
+            box.style.borderBottomColor = borderColor;
+            box.style.borderLeftColor = borderColor;
+            box.style.borderRightColor = borderColor;
+            box.style.paddingTop = 4;
+            box.style.paddingBottom = 4;
+            box.style.paddingLeft = 6;
+            box.style.paddingRight = 6;
+            box.style.marginTop = 4;
+            box.style.marginBottom = 4;
+            return box;
+        }
+
+        public static VisualElement CreateGUI()
+        {
+            var root = new VisualElement();
+            root.Add(new Label("Atlasizador de materiales") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginBottom = 6 } });
+            root.Add(new HelpBox("Convierte mallas combinadas con múltiples materiales en un único material con atlas.", HelpBoxMessageType.Info));
+
+            var contentContainer = new VisualElement { style = { marginTop = 6 } };
+            root.Add(contentContainer);
+
+            void RefreshContent()
             {
-                useCustomAtlasWorkflow = newToggle;
-                if (!useCustomAtlasWorkflow)
+                contentContainer.Clear();
+
+                if (Selection.gameObjects == null || Selection.gameObjects.Length == 0)
                 {
-                    ClearCustomStatus();
-                    ClearCustomUvPreview();
+                    contentContainer.Add(new HelpBox("Selecciona al menos un objeto con MeshRenderer para continuar.", HelpBoxMessageType.Warning));
+                    return;
                 }
-            }
 
-            if (!useCustomAtlasWorkflow)
-            {
-                return;
-            }
-
-            if (!string.IsNullOrEmpty(customStatusMessage))
-            {
-                EditorGUILayout.HelpBox(customStatusMessage, customStatusType);
-            }
-
-            UpdateCustomUvPreviewEntries(context);
-
-            showCustomAtlasBuilder = EditorGUILayout.BeginFoldoutHeaderGroup(showCustomAtlasBuilder, "Atlas personalizado");
-            if (showCustomAtlasBuilder)
-            {
-                EditorGUILayout.HelpBox("Combina varias texturas en una cuadrícula uniforme para construir un atlas de referencia similar al flujo VAT UV Visual.", MessageType.None);
-
-                int previousCount = customAtlasImageCount;
-                customAtlasImageCount = EditorGUILayout.IntSlider("Número de imágenes", customAtlasImageCount, 1, 16);
-                if (customAtlasImageCount != previousCount)
+                SelectionContext context = BuildSelectionContext(out string selectionMessage, out MessageType messageType);
+                if (context == null)
                 {
-                    EnsureCustomAtlasSourceListSize();
+                    contentContainer.Add(new HelpBox(selectionMessage, ToHelpBoxType(messageType)));
+                    return;
                 }
-                EnsureCustomAtlasSourceListSize();
 
-                using (new EditorGUI.IndentLevelScope())
+                Material[] materials = context.MaterialArray;
+                if (materials == null || materials.Length == 0)
                 {
-                    for (int i = 0; i < customAtlasSourceTextures.Count; i++)
+                    contentContainer.Add(new HelpBox("No se detectaron materiales en los MeshRenderers seleccionados.", HelpBoxMessageType.Warning));
+                    return;
+                }
+
+                if (!context.RequiresTemporaryMesh)
+                {
+                    Mesh mesh = context.TargetFilter.sharedMesh;
+                    if (mesh == null)
                     {
-                        customAtlasSourceTextures[i] = (Texture2D)EditorGUILayout.ObjectField($"Imagen {i + 1}", customAtlasSourceTextures[i], typeof(Texture2D), false);
+                        contentContainer.Add(new HelpBox("El MeshFilter no tiene mesh asignado.", HelpBoxMessageType.Warning));
+                        return;
+                    }
+
+                    if (mesh.uv == null || mesh.uv.Length == 0)
+                    {
+                        contentContainer.Add(new HelpBox("La malla necesita UVs en el canal principal para generar el atlas.", HelpBoxMessageType.Error));
+                        return;
+                    }
+
+                    if (mesh.subMeshCount != materials.Length)
+                    {
+                        contentContainer.Add(new HelpBox("El número de submeshes no coincide con la cantidad de materiales. El resultado puede no ser el esperado.", HelpBoxMessageType.Warning));
                     }
                 }
-
-                customAtlasCellResolution = EditorGUILayout.IntPopup("Resolución por imagen", customAtlasCellResolution, customAtlasResolutionLabels, customAtlasResolutionSizes);
-
-                using (new EditorGUILayout.HorizontalScope())
+                else if (context.SubMeshCount == 0)
                 {
-                    if (GUILayout.Button("Generar atlas"))
-                    {
-                        GenerateCustomAtlasTexture();
-                    }
+                    contentContainer.Add(new HelpBox("No se detectaron submeshes válidos en la selección.", HelpBoxMessageType.Warning));
+                    return;
+                }
 
-                    using (new EditorGUI.DisabledScope(customGeneratedAtlas == null))
+                AddInfoRow(contentContainer, "MeshRenderers detectados", context.Renderers.Count.ToString());
+                AddInfoRow(contentContainer, "Submeshes combinados", context.SubMeshCount.ToString());
+                AddInfoRow(contentContainer, "Materiales totales", materials.Length.ToString());
+                AddInfoRow(contentContainer, "Materiales únicos", context.UniqueMaterialCount.ToString());
+                AddInfoRow(contentContainer, "Vértices estimados", context.VertexCount.ToString());
+
+                if (!HasMultipleMaterials(materials) && context.SubMeshCount <= 1)
+                {
+                    contentContainer.Add(new HelpBox("La selección ya utiliza un único material.", HelpBoxMessageType.Info));
+                }
+
+                if (context.RequiresTemporaryMesh)
+                {
+                    string infoMessage = $"Se combinarán temporalmente {context.Renderers.Count} MeshRenderers y el resultado se aplicará al objeto activo '{context.TargetRenderer.name}'.";
+                    contentContainer.Add(new HelpBox(infoMessage, HelpBoxMessageType.Info));
+
+                    var includedBox = CreateBorderedBox();
+                    includedBox.Add(new Label("Objetos incluidos:"));
+                    List<string> samples = context.GetRendererSamples();
+                    foreach (string sample in samples)
                     {
-                        if (GUILayout.Button("Asignar atlas generado"))
+                        includedBox.Add(new Label("• " + sample) { style = { marginLeft = 10, fontSize = 10 } });
+                    }
+                    if (context.Renderers.Count > samples.Count)
+                    {
+                        includedBox.Add(new Label($"…{context.Renderers.Count - samples.Count} adicionales") { style = { marginLeft = 10, fontSize = 10 } });
+                    }
+                    contentContainer.Add(includedBox);
+                }
+
+                if (context.Skipped.Count > 0)
+                {
+                    var skippedBox = CreateBorderedBox();
+                    skippedBox.Add(new Label("Omitidos:"));
+                    foreach (string skipped in context.Skipped)
+                    {
+                        skippedBox.Add(new Label("• " + skipped) { style = { marginLeft = 10, fontSize = 10 } });
+                    }
+                    contentContainer.Add(skippedBox);
+                }
+
+                var materialScrollView = new ScrollView { style = { height = 120, marginTop = 4 } };
+                for (int i = 0; i < materials.Length; i++)
+                {
+                    Material material = materials[i];
+                    string matName = material != null ? material.name : "(Material null)";
+                    string textureInfo = "Sin textura";
+                    if (material != null)
+                    {
+                        Texture baseMap = material.HasProperty("_BaseMap") ? material.GetTexture("_BaseMap") : null;
+                        if (baseMap == null)
                         {
-                            customAtlasTexture = customGeneratedAtlas;
-                            SetCustomStatus($"Atlas asignado ({customGeneratedAtlas.width}x{customGeneratedAtlas.height}).", MessageType.Info);
+                            baseMap = material.mainTexture;
+                        }
+                        if (baseMap != null)
+                        {
+                            textureInfo = $"{baseMap.width}x{baseMap.height}";
                         }
                     }
-                }
 
-                if (customGeneratedAtlas != null)
+                    materialScrollView.Add(new Label($"• Submesh {i + 1}: {matName} ({textureInfo})") { style = { fontSize = 10 } });
+                }
+                contentContainer.Add(materialScrollView);
+
+                var atlasSizeRow = new VisualElement { style = { flexDirection = FlexDirection.Row, marginTop = 8 } };
+                var atlasSizeButtons = new List<Button>();
+
+                void RefreshAtlasSizeButtons()
                 {
-                    Rect previewRect = GUILayoutUtility.GetRect(100f, 140f, GUILayout.ExpandWidth(true));
-                    if (Event.current.type == EventType.Repaint)
+                    for (int i = 0; i < atlasSizeButtons.Count; i++)
                     {
-                        GUI.DrawTexture(previewRect, customGeneratedAtlas, ScaleMode.ScaleToFit);
+                        atlasSizeButtons[i].style.unityFontStyleAndWeight = i == atlasSizeIndex ? FontStyle.Bold : FontStyle.Normal;
+                        atlasSizeButtons[i].style.backgroundColor = i == atlasSizeIndex ? MTUIColors.BlueBackground : MTUIColors.NeutralBackground;
                     }
-                    EditorGUILayout.LabelField($"Atlas generado: {customGeneratedAtlas.width}x{customGeneratedAtlas.height}", EditorStyles.miniLabel);
                 }
-            }
-            EditorGUILayout.EndFoldoutHeaderGroup();
 
-            customAtlasTexture = (Texture2D)EditorGUILayout.ObjectField("Atlas en uso", customAtlasTexture, typeof(Texture2D), false);
-            if (customAtlasTexture == null)
-            {
-                EditorGUILayout.HelpBox("Asigna un atlas generado o existente para utilizarlo durante la conversión.", MessageType.Info);
-            }
-            else
-            {
-                EditorGUILayout.LabelField($"Dimensiones del atlas: {customAtlasTexture.width}x{customAtlasTexture.height}", EditorStyles.miniLabel);
-            }
-
-            GUILayout.Space(6f);
-            EditorGUILayout.LabelField("Transformación UV", EditorStyles.boldLabel);
-
-            bool hasPreviewData = HasValidCustomPreviewData();
-            CustomUvPreviewEntry activeEntry = GetActiveCustomUvPreviewEntry();
-
-            using (new EditorGUI.DisabledScope(!hasPreviewData || activeEntry == null))
-            {
-                Vector2 newPosition = EditorGUILayout.Vector2Field("Posición", activeEntry != null ? activeEntry.TransformPosition : Vector2.zero);
-                if (activeEntry != null)
+                for (int i = 0; i < atlasSizeLabels.Length; i++)
                 {
-                    activeEntry.TransformPosition = newPosition;
+                    int index = i;
+                    var sizeButton = new Button(() =>
+                    {
+                        atlasSizeIndex = Mathf.Clamp(index, 0, atlasSizes.Length - 1);
+                        RefreshAtlasSizeButtons();
+                    })
+                    { text = atlasSizeLabels[i], style = { flexGrow = 1 } };
+                    atlasSizeButtons.Add(sizeButton);
+                    atlasSizeRow.Add(sizeButton);
                 }
+                RefreshAtlasSizeButtons();
+                contentContainer.Add(atlasSizeRow);
 
-                EditorGUILayout.BeginHorizontal();
-                Vector2 referenceScale = activeEntry != null ? activeEntry.TransformScale : Vector2.one;
-                Vector2 newScale = EditorGUILayout.Vector2Field("Escala", referenceScale);
-                bool newLock = GUILayout.Toggle(customLockUniformScale, new GUIContent("Uniforme"), "Button", GUILayout.Width(90f));
-                if (!customLockUniformScale && newLock)
+                var paddingSlider = new SliderInt("Padding", 0, 64) { value = atlasPadding };
+                paddingSlider.RegisterValueChangedCallback(evt => atlasPadding = evt.newValue);
+                contentContainer.Add(paddingSlider);
+
+                Button generateButton = null;
+                HelpBox memoryWarning = null;
+
+                void RefreshGenerateButton()
                 {
-                    float uniform = Mathf.Max(0.01f, (newScale.x + newScale.y) * 0.5f);
-                    newScale = new Vector2(uniform, uniform);
+                    bool canGenerateAtlas = HasMultipleMaterials(materials) || context.SubMeshCount > 1;
+                    generateButton.SetEnabled(canGenerateAtlas);
                 }
-                if (newLock)
+
+                void RefreshMemoryWarning()
                 {
-                    float uniform = Mathf.Max(0.01f, newScale.x);
-                    newScale = new Vector2(uniform, uniform);
+                    memoryWarning.style.display = !saveAtlasTexture ? DisplayStyle.Flex : DisplayStyle.None;
                 }
-                EditorGUILayout.EndHorizontal();
 
-                newScale.x = Mathf.Clamp(newScale.x, 0.01f, 100f);
-                newScale.y = Mathf.Clamp(newScale.y, 0.01f, 100f);
+                var saveAtlasToggle = new Toggle("Guardar atlas como PNG") { value = saveAtlasTexture, style = { marginTop = 6 } };
+                var saveMaterialToggle = new Toggle("Guardar material como asset") { value = saveMaterialAsset };
+                saveMaterialToggle.SetEnabled(saveAtlasTexture);
 
-                if (activeEntry != null)
+                var saveMeshToggle = new Toggle("Guardar malla resultante como asset") { value = saveMeshAsset };
+
+                var folderField = new ObjectField("Carpeta destino") { objectType = typeof(DefaultAsset), allowSceneObjects = false, value = outputFolder, style = { marginLeft = 15 } };
+                var folderHelpBox = new HelpBox("Si no se asigna carpeta se usará 'Assets/'.", HelpBoxMessageType.Info) { style = { marginLeft = 15 } };
+
+                void RefreshFolderState()
                 {
-                    activeEntry.TransformScale = newScale;
+                    folderField.SetEnabled(saveAtlasTexture || saveMaterialAsset || saveMeshAsset);
+                    folderHelpBox.style.display = outputFolder == null ? DisplayStyle.Flex : DisplayStyle.None;
                 }
 
-                customLockUniformScale = newLock;
-
-                float referenceRotation = activeEntry != null ? activeEntry.TransformRotation : 0f;
-                float newRotation = EditorGUILayout.Slider("Rotación", referenceRotation, -360f, 360f);
-                if (activeEntry != null)
+                saveAtlasToggle.RegisterValueChangedCallback(evt =>
                 {
-                    activeEntry.TransformRotation = newRotation;
-                }
+                    saveAtlasTexture = evt.newValue;
+                    saveMaterialToggle.SetEnabled(saveAtlasTexture);
+                    if (!saveAtlasTexture)
+                    {
+                        saveMaterialAsset = false;
+                        saveMaterialToggle.SetValueWithoutNotify(false);
+                    }
+                    RefreshFolderState();
+                    RefreshMemoryWarning();
+                    RefreshGenerateButton();
+                });
+                saveMaterialToggle.RegisterValueChangedCallback(evt =>
+                {
+                    saveMaterialAsset = saveAtlasTexture && evt.newValue;
+                    RefreshFolderState();
+                });
+                saveMeshToggle.RegisterValueChangedCallback(evt =>
+                {
+                    saveMeshAsset = evt.newValue;
+                    RefreshFolderState();
+                });
+
+                contentContainer.Add(saveAtlasToggle);
+                contentContainer.Add(saveMaterialToggle);
+                contentContainer.Add(saveMeshToggle);
+
+                var nameField = new TextField("Nombre base") { value = outputName, style = { marginLeft = 15, marginTop = 4 } };
+                nameField.RegisterValueChangedCallback(evt => outputName = evt.newValue);
+                contentContainer.Add(nameField);
+
+                folderField.RegisterValueChangedCallback(evt =>
+                {
+                    outputFolder = evt.newValue as DefaultAsset;
+                    RefreshFolderState();
+                });
+                RefreshFolderState();
+                contentContainer.Add(folderField);
+                contentContainer.Add(folderHelpBox);
+
+                contentContainer.Add(BuildCustomAtlasWorkflowSection(context));
+
+                memoryWarning = new HelpBox("El atlas y el material permanecerán en memoria hasta que guardes la escena o exportes manualmente.", HelpBoxMessageType.Info) { style = { marginTop = 6 } };
+                RefreshMemoryWarning();
+                contentContainer.Add(memoryWarning);
+
+                var cannotGenerateHelpBox = new HelpBox("Se requieren al menos dos materiales o submeshes para generar el atlas.", HelpBoxMessageType.Info) { style = { marginTop = 6 } };
+                cannotGenerateHelpBox.style.display = (!HasMultipleMaterials(materials) && context.SubMeshCount <= 1) ? DisplayStyle.Flex : DisplayStyle.None;
+                contentContainer.Add(cannotGenerateHelpBox);
+
+                generateButton = new Button(() => ConvertSelection(context))
+                {
+                    text = "Generar atlas y material único",
+                    style = { marginTop = 10 }
+                };
+                RefreshGenerateButton();
+                contentContainer.Add(generateButton);
             }
 
-            if (!hasPreviewData)
-            {
-                EditorGUILayout.HelpBox("Selecciona MeshRenderers con UV válidos para visualizar y editar la transformación.", MessageType.Info);
-            }
+            root.RegisterCallback<AttachToPanelEvent>(_ => Selection.selectionChanged += RefreshContent);
+            root.RegisterCallback<DetachFromPanelEvent>(_ => Selection.selectionChanged -= RefreshContent);
 
-            DrawCustomUvPreviewLegend();
+            RefreshContent();
 
-            if (hasPreviewData)
+            return root;
+        }
+
+        // El constructor manual de atlas conserva el lienzo de arrastre de UVs (fondo, cuadrícula,
+        // gizmos y manejo de ratón) como IMGUI embebido en un IMGUIContainer: es un editor visual
+        // tipo "canvas" con interacción de arrastre continua, no un formulario, y no se traduce
+        // limpiamente a controles de UI Toolkit estándar. El resto de esta sección (listas,
+        // campos, botones, mensajes de estado) sí usa VisualElement nativos.
+        private static VisualElement BuildCustomAtlasWorkflowSection(SelectionContext context)
+        {
+            var section = new VisualElement { style = { marginTop = 10 } };
+            section.Add(new Label("Flujo manual de atlas (VAT UV Visual)") { style = { unityFontStyleAndWeight = FontStyle.Bold } });
+
+            var workflowToggle = new Toggle("Usar constructor manual de atlas y transformaciones UV") { value = useCustomAtlasWorkflow };
+            section.Add(workflowToggle);
+
+            var bodyContainer = new VisualElement();
+            section.Add(bodyContainer);
+
+            var statusContainer = new VisualElement();
+            var atlasBuilderFoldout = new Foldout { text = "Atlas personalizado", value = showCustomAtlasBuilder };
+            atlasBuilderFoldout.RegisterValueChangedCallback(evt => showCustomAtlasBuilder = evt.newValue);
+            var atlasInUseContainer = new VisualElement { style = { marginTop = 6 } };
+            var transformContainer = new VisualElement();
+            var legendContainer = new VisualElement();
+
+            IMGUIContainer canvasContainer = new IMGUIContainer(() =>
             {
+                if (!HasValidCustomPreviewData())
+                {
+                    return;
+                }
+
                 Rect previewRect = GUILayoutUtility.GetAspectRect(1f, GUILayout.ExpandWidth(true), GUILayout.MaxHeight(400f));
                 DrawCustomUvPreviewBackground(previewRect);
 
@@ -382,37 +387,362 @@ namespace JaimeCamachoDev.Multitool.Modeling
 
                 DrawCustomUvPreviewGrid(previewRect);
                 DrawCustomUvPreview(previewRect);
-            }
+            });
 
-            EditorGUILayout.HelpBox("Ajusta cada elemento de forma individual y utiliza \"Aplicar UV a la malla\" para guardar los cambios, replicando el flujo de trabajo de VAT UV Visual.", MessageType.None);
-
-            using (new EditorGUILayout.HorizontalScope())
+            void RefreshStatus()
             {
-                using (new EditorGUI.DisabledScope(activeEntry == null))
+                statusContainer.Clear();
+                if (!string.IsNullOrEmpty(customStatusMessage))
                 {
-                    if (GUILayout.Button("Aplicar UV a la malla"))
-                    {
-                        ApplyActiveCustomUvTransform();
-                    }
-
-                    if (GUILayout.Button("Restaurar UV originales"))
-                    {
-                        RestoreActiveCustomUvToOriginal();
-                    }
-                }
-
-                GUILayout.FlexibleSpace();
-
-                if (GUILayout.Button("Restablecer gizmo"))
-                {
-                    ResetActiveCustomUvTransform();
-                }
-
-                if (GUILayout.Button("Limpiar mensaje"))
-                {
-                    ClearCustomStatus();
+                    statusContainer.Add(new HelpBox(customStatusMessage, ToHelpBoxType(customStatusType)));
                 }
             }
+
+            void RefreshAtlasBuilderFoldout()
+            {
+                atlasBuilderFoldout.Clear();
+
+                atlasBuilderFoldout.Add(new HelpBox("Combina varias texturas en una cuadrícula uniforme para construir un atlas de referencia similar al flujo VAT UV Visual.", HelpBoxMessageType.None));
+
+                var countSlider = new SliderInt("Número de imágenes", 1, 16) { value = customAtlasImageCount };
+                countSlider.RegisterValueChangedCallback(evt =>
+                {
+                    customAtlasImageCount = evt.newValue;
+                    EnsureCustomAtlasSourceListSize();
+                    RefreshAtlasBuilderFoldout();
+                });
+                atlasBuilderFoldout.Add(countSlider);
+
+                EnsureCustomAtlasSourceListSize();
+                for (int i = 0; i < customAtlasSourceTextures.Count; i++)
+                {
+                    int index = i;
+                    var textureField = new ObjectField($"Imagen {i + 1}") { objectType = typeof(Texture2D), allowSceneObjects = false, value = customAtlasSourceTextures[index], style = { marginLeft = 15 } };
+                    textureField.RegisterValueChangedCallback(evt => customAtlasSourceTextures[index] = evt.newValue as Texture2D);
+                    atlasBuilderFoldout.Add(textureField);
+                }
+
+                var resolutionChoices = new List<int>(customAtlasResolutionSizes);
+                var resolutionField = new PopupField<int>("Resolución por imagen", resolutionChoices, customAtlasCellResolution, v => v.ToString(), v => v.ToString());
+                resolutionField.RegisterValueChangedCallback(evt => customAtlasCellResolution = evt.newValue);
+                atlasBuilderFoldout.Add(resolutionField);
+
+                var buttonsRow = new VisualElement { style = { flexDirection = FlexDirection.Row, marginTop = 4 } };
+                buttonsRow.Add(new Button(() =>
+                {
+                    GenerateCustomAtlasTexture();
+                    RefreshStatus();
+                    RefreshAtlasBuilderFoldout();
+                })
+                { text = "Generar atlas" });
+
+                var assignAtlasButton = new Button(() =>
+                {
+                    customAtlasTexture = customGeneratedAtlas;
+                    SetCustomStatus($"Atlas asignado ({customGeneratedAtlas.width}x{customGeneratedAtlas.height}).", MessageType.Info);
+                    RefreshStatus();
+                    RefreshAtlasInUseSection();
+                    canvasContainer.MarkDirtyRepaint();
+                })
+                { text = "Asignar atlas generado", style = { marginLeft = 6 } };
+                assignAtlasButton.SetEnabled(customGeneratedAtlas != null);
+                buttonsRow.Add(assignAtlasButton);
+                atlasBuilderFoldout.Add(buttonsRow);
+
+                if (customGeneratedAtlas != null)
+                {
+                    atlasBuilderFoldout.Add(new Image { image = customGeneratedAtlas, scaleMode = ScaleMode.ScaleToFit, style = { height = 140, marginTop = 4 } });
+                    atlasBuilderFoldout.Add(new Label($"Atlas generado: {customGeneratedAtlas.width}x{customGeneratedAtlas.height}") { style = { fontSize = 10 } });
+                }
+            }
+
+            void RefreshAtlasInUseSection()
+            {
+                atlasInUseContainer.Clear();
+
+                var atlasField = new ObjectField("Atlas en uso") { objectType = typeof(Texture2D), allowSceneObjects = false, value = customAtlasTexture };
+                atlasField.RegisterValueChangedCallback(evt =>
+                {
+                    customAtlasTexture = evt.newValue as Texture2D;
+                    RefreshAtlasInUseSection();
+                    canvasContainer.MarkDirtyRepaint();
+                });
+                atlasInUseContainer.Add(atlasField);
+
+                if (customAtlasTexture == null)
+                {
+                    atlasInUseContainer.Add(new HelpBox("Asigna un atlas generado o existente para utilizarlo durante la conversión.", HelpBoxMessageType.Info));
+                }
+                else
+                {
+                    atlasInUseContainer.Add(new Label($"Dimensiones del atlas: {customAtlasTexture.width}x{customAtlasTexture.height}") { style = { fontSize = 10 } });
+                }
+            }
+
+            void RefreshLegend()
+            {
+                legendContainer.Clear();
+                if (customUvPreviewEntries.Count == 0)
+                {
+                    return;
+                }
+
+                legendContainer.Add(new Label("Objetos en vista previa") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginTop = 6 } });
+                var scroll = new ScrollView { style = { maxHeight = 140 } };
+
+                for (int i = 0; i < customUvPreviewEntries.Count; i++)
+                {
+                    int index = i;
+                    CustomUvPreviewEntry entry = customUvPreviewEntries[index];
+                    if (entry == null)
+                    {
+                        continue;
+                    }
+
+                    var row = new VisualElement { style = { flexDirection = FlexDirection.Row, alignItems = Align.Center, marginBottom = 2 } };
+
+                    var activeToggle = new Toggle { value = customUvPreviewActiveIndex == index, style = { marginRight = 4 } };
+                    activeToggle.RegisterValueChangedCallback(evt =>
+                    {
+                        if (evt.newValue)
+                        {
+                            SetActiveCustomUvPreviewIndex(index);
+                            RefreshLegendLocal();
+                            RefreshTransformSectionLocal();
+                            canvasContainer.MarkDirtyRepaint();
+                        }
+                        else if (customUvPreviewActiveIndex == index)
+                        {
+                            activeToggle.SetValueWithoutNotify(true);
+                        }
+                    });
+                    row.Add(activeToggle);
+
+                    var visibleToggle = new Toggle { value = entry.Visible, style = { marginRight = 4 } };
+                    visibleToggle.RegisterValueChangedCallback(evt =>
+                    {
+                        entry.Visible = evt.newValue;
+                        canvasContainer.MarkDirtyRepaint();
+                    });
+                    row.Add(visibleToggle);
+
+                    row.Add(new VisualElement { style = { width = 18, height = 18, backgroundColor = entry.OutlineColor, marginRight = 4 } });
+
+                    string label = string.IsNullOrEmpty(entry.DisplayName) ? $"Malla {index + 1}" : entry.DisplayName;
+                    var nameButton = new Button(() =>
+                    {
+                        SetActiveCustomUvPreviewIndex(index);
+                        RefreshLegendLocal();
+                        RefreshTransformSectionLocal();
+                        canvasContainer.MarkDirtyRepaint();
+                    })
+                    { text = label };
+                    if (index == customUvPreviewActiveIndex)
+                    {
+                        nameButton.style.unityFontStyleAndWeight = FontStyle.Bold;
+                    }
+                    row.Add(nameButton);
+
+                    scroll.Add(row);
+                }
+
+                legendContainer.Add(scroll);
+            }
+
+            void RefreshTransformSection()
+            {
+                transformContainer.Clear();
+
+                bool hasPreviewData = HasValidCustomPreviewData();
+                CustomUvPreviewEntry activeEntry = GetActiveCustomUvPreviewEntry();
+                bool controlsEnabled = hasPreviewData && activeEntry != null;
+
+                var positionField = new Vector2Field("Posición") { value = activeEntry != null ? activeEntry.TransformPosition : Vector2.zero };
+                positionField.SetEnabled(controlsEnabled);
+                positionField.RegisterValueChangedCallback(evt =>
+                {
+                    if (activeEntry != null)
+                    {
+                        activeEntry.TransformPosition = evt.newValue;
+                        canvasContainer.MarkDirtyRepaint();
+                    }
+                });
+                transformContainer.Add(positionField);
+
+                var scaleRow = new VisualElement { style = { flexDirection = FlexDirection.Row } };
+                var scaleField = new Vector2Field("Escala") { value = activeEntry != null ? activeEntry.TransformScale : Vector2.one, style = { flexGrow = 1 } };
+                var uniformToggle = new Button { text = "Uniforme" };
+
+                void RefreshUniformToggleVisual()
+                {
+                    uniformToggle.style.backgroundColor = customLockUniformScale ? MTUIColors.BlueBackground : MTUIColors.NeutralBackground;
+                }
+                RefreshUniformToggleVisual();
+
+                scaleField.RegisterValueChangedCallback(evt =>
+                {
+                    Vector2 newScale = evt.newValue;
+                    if (customLockUniformScale)
+                    {
+                        float uniform = Mathf.Max(0.01f, newScale.x);
+                        newScale = new Vector2(uniform, uniform);
+                    }
+                    newScale.x = Mathf.Clamp(newScale.x, 0.01f, 100f);
+                    newScale.y = Mathf.Clamp(newScale.y, 0.01f, 100f);
+                    scaleField.SetValueWithoutNotify(newScale);
+                    if (activeEntry != null)
+                    {
+                        activeEntry.TransformScale = newScale;
+                        canvasContainer.MarkDirtyRepaint();
+                    }
+                });
+
+                uniformToggle.clicked += () =>
+                {
+                    customLockUniformScale = !customLockUniformScale;
+                    RefreshUniformToggleVisual();
+                    if (customLockUniformScale)
+                    {
+                        Vector2 current = scaleField.value;
+                        float uniform = Mathf.Max(0.01f, (current.x + current.y) * 0.5f);
+                        Vector2 uniformScale = new Vector2(uniform, uniform);
+                        scaleField.SetValueWithoutNotify(uniformScale);
+                        if (activeEntry != null)
+                        {
+                            activeEntry.TransformScale = uniformScale;
+                            canvasContainer.MarkDirtyRepaint();
+                        }
+                    }
+                };
+
+                scaleField.SetEnabled(controlsEnabled);
+                uniformToggle.SetEnabled(controlsEnabled);
+                scaleRow.Add(scaleField);
+                scaleRow.Add(uniformToggle);
+                transformContainer.Add(scaleRow);
+
+                var rotationSlider = new Slider("Rotación", -360f, 360f) { value = activeEntry != null ? activeEntry.TransformRotation : 0f };
+                rotationSlider.SetEnabled(controlsEnabled);
+                rotationSlider.RegisterValueChangedCallback(evt =>
+                {
+                    if (activeEntry != null)
+                    {
+                        activeEntry.TransformRotation = evt.newValue;
+                        canvasContainer.MarkDirtyRepaint();
+                    }
+                });
+                transformContainer.Add(rotationSlider);
+
+                if (!hasPreviewData)
+                {
+                    transformContainer.Add(new HelpBox("Selecciona MeshRenderers con UV válidos para visualizar y editar la transformación.", HelpBoxMessageType.Info));
+                }
+            }
+
+            // Los métodos locales no pueden auto-referenciarse antes de estar completamente
+            // declarados dentro de otra lambda anidada en algunos casos límite; se exponen
+            // mediante estas referencias para que RefreshLegend/RefreshTransformSection puedan
+            // invocarse mutuamente sin ambigüedad.
+            void RefreshLegendLocal() => RefreshLegend();
+            void RefreshTransformSectionLocal() => RefreshTransformSection();
+
+            var genericMessage = new HelpBox("Ajusta cada elemento de forma individual y utiliza \"Aplicar UV a la malla\" para guardar los cambios, replicando el flujo de trabajo de VAT UV Visual.", HelpBoxMessageType.None) { style = { marginTop = 6 } };
+
+            var actionsRow = new VisualElement { style = { flexDirection = FlexDirection.Row, marginTop = 6 } };
+            Button applyButton = new Button(() =>
+            {
+                ApplyActiveCustomUvTransform();
+                RefreshStatus();
+                RefreshTransformSection();
+                RefreshLegend();
+                canvasContainer.MarkDirtyRepaint();
+            })
+            { text = "Aplicar UV a la malla" };
+
+            Button restoreButton = new Button(() =>
+            {
+                RestoreActiveCustomUvToOriginal();
+                RefreshStatus();
+                RefreshTransformSection();
+                RefreshLegend();
+                canvasContainer.MarkDirtyRepaint();
+            })
+            { text = "Restaurar UV originales", style = { marginLeft = 6 } };
+
+            void RefreshActionButtons()
+            {
+                bool enabled = GetActiveCustomUvPreviewEntry() != null;
+                applyButton.SetEnabled(enabled);
+                restoreButton.SetEnabled(enabled);
+            }
+
+            actionsRow.Add(applyButton);
+            actionsRow.Add(restoreButton);
+            actionsRow.Add(new VisualElement { style = { flexGrow = 1 } });
+            actionsRow.Add(new Button(() =>
+            {
+                ResetActiveCustomUvTransform();
+                RefreshTransformSection();
+                canvasContainer.MarkDirtyRepaint();
+            })
+            { text = "Restablecer gizmo" });
+            actionsRow.Add(new Button(() =>
+            {
+                ClearCustomStatus();
+                RefreshStatus();
+            })
+            { text = "Limpiar mensaje", style = { marginLeft = 6 } });
+
+            void RefreshBody()
+            {
+                bodyContainer.Clear();
+                if (!useCustomAtlasWorkflow)
+                {
+                    return;
+                }
+
+                RefreshStatus();
+                bodyContainer.Add(statusContainer);
+
+                UpdateCustomUvPreviewEntries(context);
+
+                bodyContainer.Add(atlasBuilderFoldout);
+                RefreshAtlasBuilderFoldout();
+
+                bodyContainer.Add(atlasInUseContainer);
+                RefreshAtlasInUseSection();
+
+                bodyContainer.Add(new Label("Transformación UV") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginTop = 6 } });
+                bodyContainer.Add(transformContainer);
+                RefreshTransformSection();
+
+                bodyContainer.Add(legendContainer);
+                RefreshLegend();
+
+                bodyContainer.Add(canvasContainer);
+                bodyContainer.Add(genericMessage);
+                bodyContainer.Add(actionsRow);
+                RefreshActionButtons();
+            }
+
+            workflowToggle.RegisterValueChangedCallback(evt =>
+            {
+                bool newValue = evt.newValue;
+                if (newValue != useCustomAtlasWorkflow)
+                {
+                    useCustomAtlasWorkflow = newValue;
+                    if (!useCustomAtlasWorkflow)
+                    {
+                        ClearCustomStatus();
+                        ClearCustomUvPreview();
+                    }
+                    RefreshBody();
+                }
+            });
+
+            RefreshBody();
+
+            return section;
         }
 
         private static void EnsureCustomAtlasSourceListSize()
@@ -942,57 +1272,6 @@ namespace JaimeCamachoDev.Multitool.Modeling
             SetCustomStatus($"UV originales restauradas en \"{entry.DisplayName}\".", MessageType.Info);
         }
 
-        private static void DrawCustomUvPreviewLegend()
-        {
-            if (customUvPreviewEntries.Count == 0)
-            {
-                return;
-            }
-
-            EditorGUILayout.Space();
-            EditorGUILayout.LabelField("Objetos en vista previa", EditorStyles.boldLabel);
-            customUvPreviewListScroll = EditorGUILayout.BeginScrollView(customUvPreviewListScroll, GUILayout.MaxHeight(140f));
-
-            for (int i = 0; i < customUvPreviewEntries.Count; i++)
-            {
-                CustomUvPreviewEntry entry = customUvPreviewEntries[i];
-                if (entry == null)
-                {
-                    continue;
-                }
-
-                using (new EditorGUILayout.HorizontalScope())
-                {
-                    bool wasActive = customUvPreviewActiveIndex == i;
-                    bool newActive = GUILayout.Toggle(wasActive, GUIContent.none, EditorStyles.radioButton, GUILayout.Width(20f));
-                    if (newActive && !wasActive)
-                    {
-                        SetActiveCustomUvPreviewIndex(i);
-                    }
-
-                    bool newVisible = EditorGUILayout.Toggle(entry.Visible, GUILayout.Width(20f));
-                    if (newVisible != entry.Visible)
-                    {
-                        entry.Visible = newVisible;
-                    }
-
-                    Rect colorRect = GUILayoutUtility.GetRect(18f, 18f, GUILayout.Width(18f), GUILayout.Height(18f));
-                    EditorGUI.DrawRect(colorRect, entry.OutlineColor);
-                    GUILayout.Space(4f);
-
-                    GUIStyle labelStyle = i == customUvPreviewActiveIndex ? EditorStyles.boldLabel : EditorStyles.label;
-                    string label = string.IsNullOrEmpty(entry.DisplayName) ? $"Malla {i + 1}" : entry.DisplayName;
-                    if (GUILayout.Button(label, labelStyle, GUILayout.Height(18f)))
-                    {
-                        SetActiveCustomUvPreviewIndex(i);
-                        GUI.FocusControl(null);
-                    }
-                }
-            }
-
-            EditorGUILayout.EndScrollView();
-        }
-
         private static void DrawCustomUvPreviewBackground(Rect rect)
         {
             if (Event.current.type != EventType.Repaint)
@@ -1249,7 +1528,6 @@ namespace JaimeCamachoDev.Multitool.Modeling
             customUvPreviewActiveIndex = -1;
             customUvPreviewIsDragging = false;
             customUvPreviewDragEntryIndex = -1;
-            customUvPreviewListScroll = Vector2.zero;
         }
 
         private static void ApplyCustomUvTransform(Mesh mesh)

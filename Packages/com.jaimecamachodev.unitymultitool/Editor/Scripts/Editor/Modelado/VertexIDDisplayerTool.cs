@@ -1,5 +1,7 @@
-using UnityEngine;
 using UnityEditor;
+using UnityEditor.UIElements;
+using UnityEngine;
+using UnityEngine.UIElements;
 
 namespace JaimeCamachoDev.Multitool.Modeling
 {
@@ -12,60 +14,77 @@ namespace JaimeCamachoDev.Multitool.Modeling
         private static int vertexID = -1;
         private static Vector3 vertexWorldPosition;
 
-        // Método para dibujar la herramienta en el Editor
-        public static void DrawTool()
+        // Construye la interfaz de la herramienta (UI Toolkit)
+        public static VisualElement CreateGUI()
         {
-            GUILayout.Label("Vertex ID Displayer", EditorStyles.boldLabel);
+            var root = new VisualElement();
+            root.Add(new Label("Vertex ID Displayer") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginBottom = 6 } });
 
-            // Campo para seleccionar el GameObject
-            GameObject newSelectedObject = (GameObject)EditorGUILayout.ObjectField("GameObject", selectedObject, typeof(GameObject), true);
+            var contentContainer = new VisualElement { style = { marginTop = 6 } };
 
-            // Solo releer la malla y sus vértices cuando cambia el objeto seleccionado
-            if (newSelectedObject != selectedObject)
+            var objectField = new ObjectField("GameObject") { objectType = typeof(GameObject), allowSceneObjects = true, value = selectedObject };
+            objectField.RegisterValueChangedCallback(evt =>
             {
-                selectedObject = newSelectedObject;
+                selectedObject = evt.newValue as GameObject;
 
+                // Solo releer la malla y sus vértices cuando cambia el objeto seleccionado
                 MeshFilter changedMeshFilter = selectedObject != null ? selectedObject.GetComponent<MeshFilter>() : null;
                 selectedMesh = changedMeshFilter != null ? changedMeshFilter.sharedMesh : null;
                 vertices = selectedMesh != null ? selectedMesh.vertices : null;
-            }
 
-            if (selectedObject != null)
+                RefreshContent(contentContainer);
+            });
+            root.Add(objectField);
+
+            root.Add(contentContainer);
+            RefreshContent(contentContainer);
+
+            return root;
+        }
+
+        private static void RefreshContent(VisualElement container)
+        {
+            container.Clear();
+
+            if (selectedObject == null)
             {
-                if (selectedMesh != null)
-                {
-                    // Campo para ingresar el ID del vértice
-                    GUILayout.Label("Enter Vertex ID to Display:");
-                    vertexID = EditorGUILayout.IntField(vertexID);
-
-                    // Botón para mostrar el vértice seleccionado
-                    if (GUILayout.Button("Display Vertex ID"))
-                    {
-                        DisplayVertexID();
-                    }
-
-                    GUILayout.Space(10);
-
-                    // Mostrar las coordenadas del vértice en el mundo
-                    if (vertexID >= 0 && vertexID < vertices.Length)
-                    {
-                        GUILayout.Label($"Vertex {vertexID} World Position:");
-                        GUILayout.Label($"X: {vertexWorldPosition.x}");
-                        GUILayout.Label($"Y: {vertexWorldPosition.y}");
-                        GUILayout.Label($"Z: {vertexWorldPosition.z}");
-                    }
-                }
-                else
-                {
-                    GUILayout.Label("Selected GameObject does not have a MeshFilter with a mesh.", EditorStyles.helpBox);
-                }
+                return;
             }
+
+            if (selectedMesh == null)
+            {
+                container.Add(new HelpBox("Selected GameObject does not have a MeshFilter with a mesh.", HelpBoxMessageType.Warning));
+                return;
+            }
+
+            var vertexIdField = new IntegerField("Enter Vertex ID to Display:") { value = vertexID };
+            vertexIdField.RegisterValueChangedCallback(evt => vertexID = evt.newValue);
+            container.Add(vertexIdField);
+
+            var positionLabel = new Label { style = { marginTop = 6, whiteSpace = WhiteSpace.Normal } };
+
+            void RefreshPositionLabel()
+            {
+                positionLabel.text = vertexID >= 0 && vertices != null && vertexID < vertices.Length
+                    ? $"Vertex {vertexID} World Position:\nX: {vertexWorldPosition.x}\nY: {vertexWorldPosition.y}\nZ: {vertexWorldPosition.z}"
+                    : string.Empty;
+            }
+
+            container.Add(new Button(() =>
+            {
+                DisplayVertexID();
+                RefreshPositionLabel();
+            })
+            { text = "Display Vertex ID", style = { marginTop = 6 } });
+
+            RefreshPositionLabel();
+            container.Add(positionLabel);
         }
 
         // Método para mostrar la información del vértice seleccionado
         private static void DisplayVertexID()
         {
-            if (vertexID >= 0 && vertexID < vertices.Length)
+            if (vertexID >= 0 && vertices != null && vertexID < vertices.Length)
             {
                 Transform objectTransform = selectedObject.transform;
                 vertexWorldPosition = objectTransform.TransformPoint(vertices[vertexID]);

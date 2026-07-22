@@ -1,5 +1,7 @@
 using UnityEditor;
+using UnityEditor.UIElements;
 using UnityEngine;
+using UnityEngine.UIElements;
 
 namespace JaimeCamachoDev.Multitool.Modeling
 {
@@ -8,57 +10,87 @@ namespace JaimeCamachoDev.Multitool.Modeling
         private static MeshFilter targetMeshFilter;
         private static Bounds editableBounds;
 
-        public static void DrawTool()
+        public static VisualElement CreateGUI()
         {
-            GUILayout.Label("Mesh Bounds Adjuster", EditorStyles.boldLabel);
+            var root = new VisualElement();
+            root.Add(new Label("Mesh Bounds Adjuster") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginBottom = 6 } });
+
+            var contentContainer = new VisualElement { style = { marginTop = 6 } };
 
             // Campo para seleccionar el MeshFilter
-            MeshFilter newMeshFilter = (MeshFilter)EditorGUILayout.ObjectField("Target MeshFilter", targetMeshFilter, typeof(MeshFilter), true);
+            var objectField = new ObjectField("Target MeshFilter") { objectType = typeof(MeshFilter), allowSceneObjects = true, value = targetMeshFilter };
 
-            // Si cambiamos de objeto, reinicializamos los bounds con los del mesh actual
-            if (newMeshFilter != targetMeshFilter)
+            void SyncTarget(MeshFilter newTarget)
             {
-                targetMeshFilter = newMeshFilter;
-                if (targetMeshFilter != null && targetMeshFilter.sharedMesh != null)
+                if (newTarget != targetMeshFilter)
                 {
-                    editableBounds = targetMeshFilter.sharedMesh.bounds;
+                    SetTarget(newTarget);
+                }
+                objectField.SetValueWithoutNotify(targetMeshFilter);
+                RefreshContent(contentContainer);
+            }
+
+            objectField.RegisterValueChangedCallback(evt => SyncTarget(evt.newValue as MeshFilter));
+            root.Add(objectField);
+            root.Add(contentContainer);
+
+            // Sigue la selección de la escena mientras la herramienta esté abierta
+            void OnSelectionChanged()
+            {
+                if (Selection.activeGameObject != null)
+                {
+                    MeshFilter meshFilter = Selection.activeGameObject.GetComponent<MeshFilter>();
+                    if (meshFilter != null)
+                    {
+                        SyncTarget(meshFilter);
+                    }
                 }
             }
 
+            root.RegisterCallback<AttachToPanelEvent>(_ => Selection.selectionChanged += OnSelectionChanged);
+            root.RegisterCallback<DetachFromPanelEvent>(_ => Selection.selectionChanged -= OnSelectionChanged);
+
+            RefreshContent(contentContainer);
+
+            return root;
+        }
+
+        private static void RefreshContent(VisualElement container)
+        {
+            container.Clear();
+
             if (targetMeshFilter == null)
             {
-                EditorGUILayout.HelpBox("Drag a GameObject with a MeshFilter here.", MessageType.Info);
+                container.Add(new HelpBox("Drag a GameObject with a MeshFilter here.", HelpBoxMessageType.Info));
                 return;
             }
 
             if (targetMeshFilter.sharedMesh == null)
             {
-                EditorGUILayout.HelpBox("The selected GameObject's MeshFilter has no Mesh assigned.", MessageType.Warning);
+                container.Add(new HelpBox("The selected GameObject's MeshFilter has no Mesh assigned.", HelpBoxMessageType.Warning));
                 return;
             }
 
             // Mostrar y permitir la edición de los bounds actuales
-            Vector3 newCenter = EditorGUILayout.Vector3Field("Bounds Center", editableBounds.center);
-            Vector3 newSize = EditorGUILayout.Vector3Field("Bounds Size", editableBounds.size);
+            var centerField = new Vector3Field("Bounds Center") { value = editableBounds.center };
+            centerField.RegisterValueChangedCallback(evt => editableBounds.center = evt.newValue);
+            container.Add(centerField);
 
-            // Solo actualizar si el usuario hace cambios
-            if (newCenter != editableBounds.center || newSize != editableBounds.size)
-            {
-                editableBounds.center = newCenter;
-                editableBounds.size = newSize;
-            }
+            var sizeField = new Vector3Field("Bounds Size") { value = editableBounds.size };
+            sizeField.RegisterValueChangedCallback(evt => editableBounds.size = evt.newValue);
+            container.Add(sizeField);
 
             // Botón para aplicar los cambios
-            if (GUILayout.Button("Apply Bounds"))
-            {
-                ApplyBounds();
-            }
+            container.Add(new Button(ApplyBounds) { text = "Apply Bounds", style = { marginTop = 6 } });
 
             // Botón para resetear los bounds originales
-            if (GUILayout.Button("Reset Bounds to last saved Mesh Bounds"))
+            container.Add(new Button(() =>
             {
                 ResetBounds();
-            }
+                centerField.SetValueWithoutNotify(editableBounds.center);
+                sizeField.SetValueWithoutNotify(editableBounds.size);
+            })
+            { text = "Reset Bounds to last saved Mesh Bounds" });
         }
 
         private static void ApplyBounds()

@@ -1,53 +1,131 @@
 using System.Collections.Generic;
 using UnityEditor;
+using UnityEditor.UIElements;
 using UnityEngine;
+using UnityEngine.UIElements;
 
 namespace JaimeCamachoDev.Multitool.Modeling
 {
     public static class MicroTrianglesDetectorTool
     {
         private static GameObject sceneObject;
-        private static List<(Vector3 v1, Vector3 v2, Vector3 v3)> problematicTriangles = new List<(Vector3, Vector3, Vector3)>();
+        private static readonly List<(Vector3 v1, Vector3 v2, Vector3 v3)> problematicTriangles = new List<(Vector3, Vector3, Vector3)>();
         private static int selectedTriangleIndex = -1;
 
         private static float minAreaThreshold = 0.01f;
         private static float maxEdgeRatioThreshold = 10f;
 
-        public static void DrawTool()
+        public static VisualElement CreateGUI()
         {
-            GUILayout.Label("Micro Triangle Detector", EditorStyles.boldLabel);
+            var root = new VisualElement();
+            root.Add(new Label("Micro Triangle Detector") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginBottom = 6 } });
 
-            sceneObject = (GameObject)EditorGUILayout.ObjectField("Scene Object", sceneObject, typeof(GameObject), true);
+            var statusContainer = new VisualElement();
+            var analyzeButtonContainer = new VisualElement { style = { marginTop = 10 } };
+            var resultsContainer = new VisualElement { style = { marginTop = 6 } };
 
-            GUILayout.Label("Triangle Detection Settings", EditorStyles.boldLabel);
-            minAreaThreshold = EditorGUILayout.FloatField("Min Area Threshold", minAreaThreshold);
-            maxEdgeRatioThreshold = EditorGUILayout.FloatField("Max Edge Ratio Threshold", maxEdgeRatioThreshold);
+            var objectField = new ObjectField("Scene Object") { objectType = typeof(GameObject), allowSceneObjects = true, value = sceneObject };
+            objectField.RegisterValueChangedCallback(evt =>
+            {
+                sceneObject = evt.newValue as GameObject;
+                RefreshStatus(statusContainer);
+                RefreshAnalyzeButton(analyzeButtonContainer, resultsContainer);
+            });
+            root.Add(objectField);
+            root.Add(statusContainer);
 
-            GUILayout.Label("Set Thresholds Based on Distance", EditorStyles.boldLabel);
-            if (GUILayout.Button("1 cm (Close)")) SetThresholdsForDistance(0.01f);
-            if (GUILayout.Button("10 cm (Near)")) SetThresholdsForDistance(0.1f);
-            if (GUILayout.Button("1 m (Mid-range)")) SetThresholdsForDistance(1f);
-            if (GUILayout.Button("10 m (Far)")) SetThresholdsForDistance(10f);
-            if (GUILayout.Button("100 m (Very Far)")) SetThresholdsForDistance(100f);
+            root.Add(new Label("Triangle Detection Settings") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginTop = 10 } });
 
-            GUILayout.Space(10);
-            if (GUILayout.Button("Analyze")) Analyze();
+            var minAreaField = new FloatField("Min Area Threshold") { value = minAreaThreshold };
+            minAreaField.RegisterValueChangedCallback(evt => minAreaThreshold = evt.newValue);
+            root.Add(minAreaField);
+
+            var maxEdgeField = new FloatField("Max Edge Ratio Threshold") { value = maxEdgeRatioThreshold };
+            maxEdgeField.RegisterValueChangedCallback(evt => maxEdgeRatioThreshold = evt.newValue);
+            root.Add(maxEdgeField);
+
+            root.Add(new Label("Set Thresholds Based on Distance") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginTop = 10 } });
+
+            void AddDistanceButton(string label, float distance)
+            {
+                root.Add(new Button(() =>
+                {
+                    SetThresholdsForDistance(distance);
+                    minAreaField.SetValueWithoutNotify(minAreaThreshold);
+                    maxEdgeField.SetValueWithoutNotify(maxEdgeRatioThreshold);
+                })
+                { text = label });
+            }
+
+            AddDistanceButton("1 cm (Close)", 0.01f);
+            AddDistanceButton("10 cm (Near)", 0.1f);
+            AddDistanceButton("1 m (Mid-range)", 1f);
+            AddDistanceButton("10 m (Far)", 10f);
+            AddDistanceButton("100 m (Very Far)", 100f);
+
+            root.Add(analyzeButtonContainer);
+            root.Add(resultsContainer);
+
+            RefreshStatus(statusContainer);
+            RefreshAnalyzeButton(analyzeButtonContainer, resultsContainer);
+            RefreshResults(resultsContainer);
+
+            return root;
+        }
+
+        private static void RefreshStatus(VisualElement container)
+        {
+            container.Clear();
+
+            if (sceneObject == null)
+            {
+                container.Add(new HelpBox("Arrastra un objeto de la escena con MeshFilter para poder analizarlo.", HelpBoxMessageType.Info));
+            }
+            else if (sceneObject.GetComponent<MeshFilter>() == null || sceneObject.GetComponent<MeshFilter>().sharedMesh == null)
+            {
+                container.Add(new HelpBox("El objeto seleccionado no tiene un MeshFilter con una Mesh asignada.", HelpBoxMessageType.Warning));
+            }
+        }
+
+        private static void RefreshAnalyzeButton(VisualElement container, VisualElement resultsContainer)
+        {
+            container.Clear();
+
+            bool canAnalyze = sceneObject != null && sceneObject.GetComponent<MeshFilter>() != null && sceneObject.GetComponent<MeshFilter>().sharedMesh != null;
+            var analyzeButton = new Button(() =>
+            {
+                Analyze();
+                RefreshResults(resultsContainer);
+            })
+            { text = "Analyze" };
+            analyzeButton.SetEnabled(canAnalyze);
+            container.Add(analyzeButton);
+        }
+
+        private static void RefreshResults(VisualElement container)
+        {
+            container.Clear();
 
             if (problematicTriangles.Count > 0)
             {
-                GUILayout.Label($"Found {problematicTriangles.Count} problematic triangles", EditorStyles.boldLabel);
+                container.Add(new Label($"Found {problematicTriangles.Count} problematic triangles") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginTop = 6 } });
+
+                var scroll = new ScrollView { style = { maxHeight = 240 } };
                 for (int i = 0; i < problematicTriangles.Count; i++)
                 {
-                    if (GUILayout.Button($"Triangle {i + 1}"))
+                    int index = i;
+                    scroll.Add(new Button(() =>
                     {
-                        selectedTriangleIndex = i;
-                        FocusOnTriangle(problematicTriangles[i]);
-                    }
+                        selectedTriangleIndex = index;
+                        FocusOnTriangle(problematicTriangles[index]);
+                    })
+                    { text = $"Triangle {i + 1}" });
                 }
+                container.Add(scroll);
             }
             else
             {
-                GUILayout.Label("No problematic triangles found or scan not performed.", EditorStyles.helpBox);
+                container.Add(new HelpBox("No problematic triangles found or scan not performed.", HelpBoxMessageType.None));
             }
         }
 
@@ -126,6 +204,7 @@ namespace JaimeCamachoDev.Multitool.Modeling
             sceneView.Repaint();
             SceneView.RepaintAll();
         }
+
         public static void OnSceneGUI(SceneView sceneView)
         {
             if (selectedTriangleIndex >= 0 && selectedTriangleIndex < problematicTriangles.Count)
@@ -138,6 +217,7 @@ namespace JaimeCamachoDev.Multitool.Modeling
                 Handles.SphereHandleCap(0, tri.v3, Quaternion.identity, 0.001f, EventType.Repaint);
             }
         }
+
         public static void EnableSceneView()
         {
             SceneView.duringSceneGui += OnSceneGUI;
@@ -149,7 +229,5 @@ namespace JaimeCamachoDev.Multitool.Modeling
             SceneView.duringSceneGui -= OnSceneGUI;
             SceneView.RepaintAll();
         }
-
-
     }
 }

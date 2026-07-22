@@ -9,8 +9,8 @@ namespace VZOptizone
     public static class VideoToFramesExtractorTool
     {
         private static string videoPath;
-        private static string outputPath;
-        private static float videoDuration = 3f; // Duraci�n por defecto
+        private static DefaultAsset outputFolder;
+        private static float videoDuration = 3f; // Duración por defecto
         private static float videoFrameRate = 24f; // Tasa de fotogramas por defecto
 
         public static void DrawTool()
@@ -22,8 +22,12 @@ namespace VZOptizone
 
             GUILayout.Space(10f);
 
-            // Campo para arrastrar y soltar la carpeta de salida
-            outputPath = DrawDragAndDropField("Output Folder", outputPath, true);
+            // Carpeta de salida: arrastra una carpeta desde la ventana Project
+            outputFolder = (DefaultAsset)EditorGUILayout.ObjectField("Output Folder", outputFolder, typeof(DefaultAsset), false);
+            if (outputFolder == null)
+            {
+                EditorGUILayout.HelpBox("Arrastra una carpeta del proyecto para guardar los frames extraídos.", MessageType.Info);
+            }
 
             GUILayout.Space(10f);
 
@@ -31,15 +35,23 @@ namespace VZOptizone
             videoDuration = EditorGUILayout.FloatField("Video Duration (seconds):", videoDuration);
             videoFrameRate = EditorGUILayout.FloatField("Frame Rate:", videoFrameRate);
 
+            if (string.IsNullOrEmpty(videoPath))
+            {
+                EditorGUILayout.HelpBox("Arrastra un archivo de vídeo en el campo superior para poder extraer frames.", MessageType.Info);
+            }
+
             GUILayout.Space(20f);
 
-            if (GUILayout.Button("Extract Frames from Video"))
+            using (new EditorGUI.DisabledScope(string.IsNullOrEmpty(videoPath) || outputFolder == null))
             {
-                ExtractFramesFromVideo();
+                if (GUILayout.Button("Extract Frames from Video"))
+                {
+                    ExtractFramesFromVideo();
+                }
             }
         }
 
-        private static string DrawDragAndDropField(string label, string path, bool isFolder = false)
+        private static string DrawDragAndDropField(string label, string path)
         {
             GUILayout.Label(label, EditorStyles.boldLabel);
             path = EditorGUILayout.TextField(path);
@@ -57,7 +69,7 @@ namespace VZOptizone
                     DragAndDrop.AcceptDrag();
                     foreach (var draggedObject in DragAndDrop.paths)
                     {
-                        if ((isFolder && Directory.Exists(draggedObject)) || (!isFolder && File.Exists(draggedObject)))
+                        if (File.Exists(draggedObject))
                         {
                             path = draggedObject;
                             break;
@@ -77,13 +89,15 @@ namespace VZOptizone
                 return;
             }
 
-            if (string.IsNullOrEmpty(outputPath))
+            if (outputFolder == null)
             {
-                UnityEngine.Debug.LogError("Output path is empty. Please specify the output folder path.");
+                UnityEngine.Debug.LogError("Output folder is empty. Please assign the output folder.");
                 return;
             }
 
-            // Calcular el n�mero total de fotogramas
+            string outputPath = AssetDatabase.GetAssetPath(outputFolder);
+
+            // Calcular el número total de fotogramas
             int totalFrames = Mathf.CeilToInt(videoDuration * videoFrameRate);
 
             // Crear carpeta para los frames
@@ -99,8 +113,6 @@ namespace VZOptizone
 
             // Luego extrae los frames del archivo intermedio
             string ffmpegArgs = $"-i \"{intermediatePath}\" -vf \"fps={videoFrameRate},format=rgba\" -c:v png \"{framesOutputPath}\"";
-            RunFFmpegCommand(ffmpegArgs);
-
             RunFFmpegCommand(ffmpegArgs);
 
             AssetDatabase.Refresh();

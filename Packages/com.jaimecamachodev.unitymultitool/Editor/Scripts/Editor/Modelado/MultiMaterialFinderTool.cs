@@ -1,60 +1,67 @@
-using UnityEngine;
-using UnityEditor;
 using System.Collections.Generic;
+using UnityEditor;
+using UnityEditor.UIElements;
+using UnityEngine;
+using UnityEngine.UIElements;
 
 namespace JaimeCamachoDev.Multitool.Modeling
 {
     public static class MultiMaterialFinderTool
     {
-        private static Vector2 scrollPos;
-        private static List<GameObject> objectsWithMultiMaterial = new List<GameObject>();
+        private static readonly List<GameObject> objectsWithMultiMaterial = new List<GameObject>();
 
-        public static void DrawTool()
+        public static VisualElement CreateGUI()
         {
-            GUILayout.Label("Multi-Material Finder", EditorStyles.boldLabel);
+            var root = new VisualElement();
 
-            // Botón para encontrar los objetos
-            if (GUILayout.Button("Find Objects with Multiple Materials"))
+            root.Add(new Label("Multi-Material Finder") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginBottom = 6 } });
+
+            var resultsContainer = new VisualElement { style = { marginTop = 10 } };
+
+            var findButton = new Button(() =>
             {
                 FindObjectsWithMultipleMaterials();
+                RefreshResults(resultsContainer);
+            })
+            { text = "Find Objects with Multiple Materials" };
+            root.Add(findButton);
+
+            root.Add(resultsContainer);
+            RefreshResults(resultsContainer);
+
+            return root;
+        }
+
+        private static void RefreshResults(VisualElement container)
+        {
+            container.Clear();
+
+            if (objectsWithMultiMaterial.Count == 0)
+            {
+                container.Add(new HelpBox("No objects with multiple materials found.", HelpBoxMessageType.Info));
+                return;
             }
 
-            GUILayout.Space(10);
+            container.Add(new Label("Objects with Multiple Materials:") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginBottom = 4 } });
 
-            // Mostrar los objetos encontrados
-            if (objectsWithMultiMaterial.Count > 0)
+            var scroll = new ScrollView { style = { maxHeight = 240 } };
+            foreach (GameObject go in objectsWithMultiMaterial)
             {
-                GUILayout.Label("Objects with Multiple Materials:", EditorStyles.boldLabel);
+                var row = new VisualElement { style = { flexDirection = FlexDirection.Row, marginBottom = 2 } };
 
-                // Scroll para la lista de objetos
-                scrollPos = GUILayout.BeginScrollView(scrollPos, false, true);
-
-                for (int i = 0; i < objectsWithMultiMaterial.Count; i++)
+                row.Add(new Button(() =>
                 {
-                    GUILayout.BeginHorizontal();
+                    Selection.activeGameObject = go;
+                    EditorGUIUtility.PingObject(go);
+                })
+                { text = go.name, style = { width = 200 } });
 
-                    // Botón para seleccionar el objeto
-                    if (GUILayout.Button(objectsWithMultiMaterial[i].name, GUILayout.Width(200)))
-                    {
-                        Selection.activeGameObject = objectsWithMultiMaterial[i];
-                        EditorGUIUtility.PingObject(objectsWithMultiMaterial[i]);
-                    }
+                row.Add(new Button(() => EditorGUIUtility.PingObject(go))
+                { text = "Highlight", style = { width = 100 } });
 
-                    // Botón para resaltar el objeto
-                    if (GUILayout.Button("Highlight", GUILayout.Width(100)))
-                    {
-                        EditorGUIUtility.PingObject(objectsWithMultiMaterial[i]);
-                    }
-
-                    GUILayout.EndHorizontal();
-                }
-
-                GUILayout.EndScrollView();
+                scroll.Add(row);
             }
-            else
-            {
-                GUILayout.Label("No objects with multiple materials found.", EditorStyles.helpBox);
-            }
+            container.Add(scroll);
         }
 
         // Método para encontrar los objetos con varios materiales

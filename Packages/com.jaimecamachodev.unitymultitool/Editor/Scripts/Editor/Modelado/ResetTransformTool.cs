@@ -1,7 +1,9 @@
 using System.Collections.Generic;
 using System.IO;
 using UnityEditor;
+using UnityEditor.UIElements;
 using UnityEngine;
+using UnityEngine.UIElements;
 
 namespace JaimeCamachoDev.Multitool.Modeling
 {
@@ -12,57 +14,74 @@ namespace JaimeCamachoDev.Multitool.Modeling
         private static DefaultAsset meshAssetFolder;
         private static bool preserveChildrenWorldTransform = true;
 
-        public static void DrawTool()
+        public static VisualElement CreateGUI()
         {
-            GUILayout.Label("Reset XForm", EditorStyles.boldLabel);
-            EditorGUILayout.HelpBox(
+            var root = new VisualElement();
+            root.Add(new Label("Reset XForm") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginBottom = 6 } });
+            root.Add(new HelpBox(
                 "Convierte la transformación actual de la selección en parte de la geometría para dejar el Transform en valores por defecto sin mover los objetos en escena.",
-                MessageType.Info);
+                HelpBoxMessageType.Info));
 
-            if (Selection.gameObjects.Length == 0)
+            var contentContainer = new VisualElement { style = { marginTop = 6 } };
+            root.Add(contentContainer);
+
+            void RefreshContent()
             {
-                EditorGUILayout.HelpBox("Selecciona uno o más objetos para aplicar el Reset XForm.", MessageType.Warning);
-                return;
-            }
+                contentContainer.Clear();
 
-            duplicateMeshBeforeApplying = EditorGUILayout.ToggleLeft(
-                "Duplicar el Mesh antes de aplicar",
-                duplicateMeshBeforeApplying);
-
-            using (new EditorGUI.DisabledScope(!duplicateMeshBeforeApplying))
-            {
-                saveDuplicatedMeshAsAsset = EditorGUILayout.ToggleLeft(
-                    "Guardar mesh duplicado como asset",
-                    saveDuplicatedMeshAsAsset);
-                EditorGUI.indentLevel++;
-                using (new EditorGUI.DisabledScope(!saveDuplicatedMeshAsAsset))
+                if (Selection.gameObjects.Length == 0)
                 {
-                    meshAssetFolder = (DefaultAsset)EditorGUILayout.ObjectField(
-                        "Carpeta destino",
-                        meshAssetFolder,
-                        typeof(DefaultAsset),
-                        false);
+                    contentContainer.Add(new HelpBox("Selecciona uno o más objetos para aplicar el Reset XForm.", HelpBoxMessageType.Warning));
+                    return;
                 }
-                EditorGUI.indentLevel--;
-            }
 
-            if (!duplicateMeshBeforeApplying)
-            {
-                EditorGUILayout.HelpBox(
+                var duplicateToggle = new Toggle("Duplicar el Mesh antes de aplicar") { value = duplicateMeshBeforeApplying };
+                contentContainer.Add(duplicateToggle);
+
+                var saveToggle = new Toggle("Guardar mesh duplicado como asset") { value = saveDuplicatedMeshAsAsset, style = { marginLeft = 15 } };
+                var folderField = new ObjectField("Carpeta destino") { objectType = typeof(DefaultAsset), allowSceneObjects = false, value = meshAssetFolder, style = { marginLeft = 30 } };
+                saveToggle.SetEnabled(duplicateMeshBeforeApplying);
+                folderField.SetEnabled(duplicateMeshBeforeApplying && saveDuplicatedMeshAsAsset);
+
+                var sharedWarning = new HelpBox(
                     "El mesh original se modificará directamente y afectará a todas las instancias que lo compartan.",
-                    MessageType.Warning);
+                    HelpBoxMessageType.Warning);
+                sharedWarning.style.display = duplicateMeshBeforeApplying ? DisplayStyle.None : DisplayStyle.Flex;
+
+                duplicateToggle.RegisterValueChangedCallback(evt =>
+                {
+                    duplicateMeshBeforeApplying = evt.newValue;
+                    saveToggle.SetEnabled(duplicateMeshBeforeApplying);
+                    folderField.SetEnabled(duplicateMeshBeforeApplying && saveDuplicatedMeshAsAsset);
+                    sharedWarning.style.display = duplicateMeshBeforeApplying ? DisplayStyle.None : DisplayStyle.Flex;
+                });
+
+                saveToggle.RegisterValueChangedCallback(evt =>
+                {
+                    saveDuplicatedMeshAsAsset = evt.newValue;
+                    folderField.SetEnabled(duplicateMeshBeforeApplying && saveDuplicatedMeshAsAsset);
+                });
+
+                folderField.RegisterValueChangedCallback(evt => meshAssetFolder = evt.newValue as DefaultAsset);
+
+                contentContainer.Add(saveToggle);
+                contentContainer.Add(folderField);
+                contentContainer.Add(sharedWarning);
+
+                var preserveToggle = new Toggle("Mantener la transformación global de los hijos") { value = preserveChildrenWorldTransform, style = { marginTop = 6 } };
+                preserveToggle.RegisterValueChangedCallback(evt => preserveChildrenWorldTransform = evt.newValue);
+                contentContainer.Add(preserveToggle);
+
+                contentContainer.Add(new Button(ApplyResetToSelection) { text = "Aplicar Reset XForm a la selección", style = { marginTop = 8 } });
             }
 
-            preserveChildrenWorldTransform = EditorGUILayout.ToggleLeft(
-                "Mantener la transformación global de los hijos",
-                preserveChildrenWorldTransform);
+            // Sigue la selección de la escena mientras la herramienta esté abierta
+            root.RegisterCallback<AttachToPanelEvent>(_ => Selection.selectionChanged += RefreshContent);
+            root.RegisterCallback<DetachFromPanelEvent>(_ => Selection.selectionChanged -= RefreshContent);
 
-            GUILayout.Space(8f);
+            RefreshContent();
 
-            if (GUILayout.Button("Aplicar Reset XForm a la selección"))
-            {
-                ApplyResetToSelection();
-            }
+            return root;
         }
 
         private static void ApplyResetToSelection()
