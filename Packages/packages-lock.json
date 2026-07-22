@@ -7,8 +7,8 @@
       "dependencies": {},
       "url": "https://packages.unity.com"
     },
-    "com.jaimecamacho.packagecreator": {
-      "version": "1.0.2",
+    "com.jaimecamachodev.unityfolders": {
+      "version": "2.1.0",
       "depth": 0,
       "source": "registry",
       "dependencies": {},
@@ -19,20 +19,6 @@
       "depth": 0,
       "source": "embedded",
       "dependencies": {}
-    },
-    "com.jaimecamacho.vat": {
-      "version": "1.0.5",
-      "depth": 0,
-      "source": "registry",
-      "dependencies": {},
-      "url": "https://registry.npmjs.org"
-    },
-    "com.jaimecamachodev.unityfolders": {
-      "version": "2.1.0",
-      "depth": 0,
-      "source": "registry",
-      "dependencies": {},
-      "url": "https://registry.npmjs.org"
     },
     "com.unity.2d.animation": {
       "version": "14.0.4",
