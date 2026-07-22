@@ -1,5 +1,7 @@
 using UnityEngine;
 using UnityEditor;
+using UnityEditor.UIElements;
+using UnityEngine.UIElements;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -16,87 +18,133 @@ namespace JaimeCamachoDev.Multitool.Modeling
         private static int gridY = 0;
 
         // Lista estática para almacenar los Mesh Filters seleccionados
-        private static List<MeshFilter> selectedMeshFilters = new List<MeshFilter>();
+        private static readonly List<MeshFilter> selectedMeshFilters = new List<MeshFilter>();
 
         // Diccionario para almacenar las UV originales antes de cualquier modificación
-        private static Dictionary<MeshFilter, Vector2[]> originalUVs = new Dictionary<MeshFilter, Vector2[]>();
+        private static readonly Dictionary<MeshFilter, Vector2[]> originalUVs = new Dictionary<MeshFilter, Vector2[]>();
 
-        // Método que dibuja la herramienta en el editor
-        public static void DrawTool()
+        // Construye la interfaz de la herramienta (UI Toolkit)
+        public static VisualElement CreateGUI()
         {
-            GUILayout.Label("UV Adjuster Tool", EditorStyles.boldLabel);
-            EditorGUILayout.HelpBox("Esta herramienta modifica las UVs directamente sobre el Mesh asset compartido: afecta a todos los objetos que usen esa misma malla en el proyecto.", MessageType.Info);
+            var root = new VisualElement();
+            root.Add(new Label("UV Adjuster Tool") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginBottom = 6 } });
+            root.Add(new HelpBox("Esta herramienta modifica las UVs directamente sobre el Mesh asset compartido: afecta a todos los objetos que usen esa misma malla en el proyecto.", HelpBoxMessageType.Info));
+
+            var statusContainer = new VisualElement { style = { marginTop = 6 } };
+
+            Button adjustButton = null;
+            Button undoButton = null;
+
+            void RefreshStatus()
+            {
+                statusContainer.Clear();
+
+                bool hasValidFilters = selectedMeshFilters.Any(f => f != null);
+                bool hasValidGrid = rows > 0 && columns > 0;
+                bool hasBackup = originalUVs.Count > 0;
+
+                if (!hasValidFilters)
+                {
+                    statusContainer.Add(new HelpBox("Añade al menos un Mesh Filter para poder ajustar sus UVs.", HelpBoxMessageType.Info));
+                }
+                else if (!hasValidGrid)
+                {
+                    statusContainer.Add(new HelpBox("Rows y Columns deben ser mayores que 0.", HelpBoxMessageType.Warning));
+                }
+
+                adjustButton.SetEnabled(hasValidFilters && hasValidGrid);
+                undoButton.SetEnabled(hasBackup);
+            }
 
             // Input para las filas y columnas
-            rows = EditorGUILayout.IntField("Rows", rows);
-            columns = EditorGUILayout.IntField("Columns", columns);
+            var rowsField = new IntegerField("Rows") { value = rows };
+            rowsField.RegisterValueChangedCallback(evt => { rows = evt.newValue; RefreshStatus(); });
+            root.Add(rowsField);
+
+            var columnsField = new IntegerField("Columns") { value = columns };
+            columnsField.RegisterValueChangedCallback(evt => { columns = evt.newValue; RefreshStatus(); });
+            root.Add(columnsField);
 
             // Input para la posición en la cuadrícula
-            gridX = EditorGUILayout.IntField("Grid X", gridX);
-            gridY = EditorGUILayout.IntField("Grid Y", gridY);
+            var gridXField = new IntegerField("Grid X") { value = gridX };
+            gridXField.RegisterValueChangedCallback(evt => gridX = evt.newValue);
+            root.Add(gridXField);
+
+            var gridYField = new IntegerField("Grid Y") { value = gridY };
+            gridYField.RegisterValueChangedCallback(evt => gridY = evt.newValue);
+            root.Add(gridYField);
 
             // Mostrar lista de Mesh Filters seleccionados
-            GUILayout.Label("Select Mesh Filters", EditorStyles.label);
+            root.Add(new Label("Select Mesh Filters") { style = { marginTop = 10 } });
+
+            var listContainer = new VisualElement();
+
+            void RefreshList()
+            {
+                listContainer.Clear();
+
+                for (int i = 0; i < selectedMeshFilters.Count; i++)
+                {
+                    int index = i;
+                    var row = new VisualElement { style = { flexDirection = FlexDirection.Row, marginBottom = 2 } };
+
+                    // Campo para seleccionar un Mesh Filter
+                    var filterField = new ObjectField { objectType = typeof(MeshFilter), allowSceneObjects = true, value = selectedMeshFilters[index] };
+                    filterField.style.flexGrow = 1;
+                    filterField.RegisterValueChangedCallback(evt =>
+                    {
+                        selectedMeshFilters[index] = evt.newValue as MeshFilter;
+                        RefreshStatus();
+                    });
+                    row.Add(filterField);
+
+                    // Botón para eliminar el Mesh Filter de la lista
+                    row.Add(new Button(() =>
+                    {
+                        selectedMeshFilters.RemoveAt(index);
+                        RefreshList();
+                        RefreshStatus();
+                    })
+                    { text = "Remove", style = { width = 70 } });
+
+                    listContainer.Add(row);
+                }
+            }
 
             // Botón para agregar un nuevo Mesh Filter
-            if (GUILayout.Button("Add Mesh Filter"))
+            root.Add(new Button(() =>
             {
                 selectedMeshFilters.Add(null);
-            }
+                RefreshList();
+                RefreshStatus();
+            })
+            { text = "Add Mesh Filter" });
 
-            // Mostrar todos los Mesh Filters con un botón de eliminar
-            int indexToRemove = -1;
-            for (int i = 0; i < selectedMeshFilters.Count; i++)
-            {
-                GUILayout.BeginHorizontal();
-
-                // Campo para seleccionar un Mesh Filter
-                selectedMeshFilters[i] = (MeshFilter)EditorGUILayout.ObjectField(selectedMeshFilters[i], typeof(MeshFilter), true);
-
-                // Botón para eliminar el Mesh Filter de la lista
-                if (GUILayout.Button("Remove", GUILayout.Width(70)))
-                {
-                    indexToRemove = i;
-                }
-
-                GUILayout.EndHorizontal();
-            }
-
-            if (indexToRemove >= 0)
-            {
-                selectedMeshFilters.RemoveAt(indexToRemove);
-            }
-
-            bool hasValidFilters = selectedMeshFilters.Any(f => f != null);
-            bool hasValidGrid = rows > 0 && columns > 0;
-            bool hasBackup = originalUVs.Count > 0;
-
-            if (!hasValidFilters)
-            {
-                EditorGUILayout.HelpBox("Añade al menos un Mesh Filter para poder ajustar sus UVs.", MessageType.Info);
-            }
-            else if (!hasValidGrid)
-            {
-                EditorGUILayout.HelpBox("Rows y Columns deben ser mayores que 0.", MessageType.Warning);
-            }
+            root.Add(listContainer);
+            root.Add(statusContainer);
 
             // Botón para ajustar UVs
-            using (new EditorGUI.DisabledScope(!hasValidFilters || !hasValidGrid))
+            adjustButton = new Button(() =>
             {
-                if (GUILayout.Button("Adjust UVs"))
-                {
-                    AdjustUVs();
-                }
-            }
+                AdjustUVs();
+                RefreshStatus();
+            })
+            { text = "Adjust UVs", style = { marginTop = 6 } };
+            root.Add(adjustButton);
 
             // Botón para deshacer los cambios
-            using (new EditorGUI.DisabledScope(!hasBackup))
+            undoButton = new Button(() =>
             {
-                if (GUILayout.Button("Undo last change"))
-                {
-                    UndoUVChanges();
-                }
-            }
+                UndoUVChanges();
+                RefreshStatus();
+            })
+            { text = "Undo last change" };
+            root.Add(undoButton);
+
+            RefreshList();
+            RefreshStatus();
+
+            return root;
         }
 
         // Método para ajustar las UVs de las mallas seleccionadas
