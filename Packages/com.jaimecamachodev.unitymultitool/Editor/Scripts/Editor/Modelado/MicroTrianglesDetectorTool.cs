@@ -19,6 +19,15 @@ namespace JaimeCamachoDev.Multitool.Modeling
 
             sceneObject = (GameObject)EditorGUILayout.ObjectField("Scene Object", sceneObject, typeof(GameObject), true);
 
+            if (sceneObject == null)
+            {
+                EditorGUILayout.HelpBox("Arrastra un objeto de la escena con MeshFilter para poder analizarlo.", MessageType.Info);
+            }
+            else if (sceneObject.GetComponent<MeshFilter>() == null || sceneObject.GetComponent<MeshFilter>().sharedMesh == null)
+            {
+                EditorGUILayout.HelpBox("El objeto seleccionado no tiene un MeshFilter con una Mesh asignada.", MessageType.Warning);
+            }
+
             GUILayout.Label("Triangle Detection Settings", EditorStyles.boldLabel);
             minAreaThreshold = EditorGUILayout.FloatField("Min Area Threshold", minAreaThreshold);
             maxEdgeRatioThreshold = EditorGUILayout.FloatField("Max Edge Ratio Threshold", maxEdgeRatioThreshold);
@@ -31,7 +40,11 @@ namespace JaimeCamachoDev.Multitool.Modeling
             if (GUILayout.Button("100 m (Very Far)")) SetThresholdsForDistance(100f);
 
             GUILayout.Space(10);
-            if (GUILayout.Button("Analyze")) Analyze();
+            bool canAnalyze = sceneObject != null && sceneObject.GetComponent<MeshFilter>() != null && sceneObject.GetComponent<MeshFilter>().sharedMesh != null;
+            using (new EditorGUI.DisabledScope(!canAnalyze))
+            {
+                if (GUILayout.Button("Analyze")) Analyze();
+            }
 
             if (problematicTriangles.Count > 0)
             {

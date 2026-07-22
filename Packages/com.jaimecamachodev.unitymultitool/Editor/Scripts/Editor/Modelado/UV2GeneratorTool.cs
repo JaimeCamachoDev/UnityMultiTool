@@ -14,21 +14,21 @@ namespace JaimeCamachoDev.Multitool.Modeling
             // Campo para arrastrar y soltar la malla
             selectedMesh = (Mesh)EditorGUILayout.ObjectField("Malla para Generar UV2", selectedMesh, typeof(Mesh), false);
 
-            if (selectedMesh != null && AssetImporter.GetAtPath(AssetDatabase.GetAssetPath(selectedMesh)) is ModelImporter)
+            if (selectedMesh == null)
+            {
+                EditorGUILayout.HelpBox("Arrastra una Mesh para poder generar su UV2.", MessageType.Info);
+            }
+            else if (AssetImporter.GetAtPath(AssetDatabase.GetAssetPath(selectedMesh)) is ModelImporter)
             {
                 EditorGUILayout.HelpBox("Esta malla proviene de un modelo importado (FBX/OBJ/etc). Los cambios se perderán al reimportar el modelo; considera duplicar la malla como un asset independiente antes de generar el UV2.", MessageType.Warning);
             }
 
             // Botón para generar el UV2
-            if (GUILayout.Button("Generar UV2"))
+            using (new EditorGUI.DisabledScope(selectedMesh == null))
             {
-                if (selectedMesh != null)
+                if (GUILayout.Button("Generar UV2"))
                 {
                     GenerateUV2();
-                }
-                else
-                {
-                    Debug.LogWarning("Por favor selecciona una Malla.");
                 }
             }
         }

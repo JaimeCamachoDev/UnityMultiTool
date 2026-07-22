@@ -8,35 +8,48 @@ namespace JaimeCamachoDev.Multitool.Modeling
     public static class MultimaterialMeshSplitterTool
     {
         private static Mesh meshMultiMat; // Mesh a dividir en submeshes
-        private static Object destinationFolder; // Carpeta donde se guardarán los submeshes
+        private static DefaultAsset destinationFolder; // Carpeta donde se guardarán los submeshes
 
         public static void DrawTool()
         {
             GUILayout.Label("Separar Submeshes por Material", EditorStyles.boldLabel);
 
-            // Seleccionar la malla
+            GUILayout.Label("1. Arrastra la malla a dividir", EditorStyles.boldLabel);
             meshMultiMat = (Mesh)EditorGUILayout.ObjectField("Mesh", meshMultiMat, typeof(Mesh), true);
 
-            // Seleccionar la carpeta de destino
-            destinationFolder = EditorGUILayout.ObjectField("Carpeta de Destino", destinationFolder, typeof(Object), false);
+            GUILayout.Space(10);
+
+            GUILayout.Label("2. Arrastra la carpeta de destino", EditorStyles.boldLabel);
+            destinationFolder = (DefaultAsset)EditorGUILayout.ObjectField("Carpeta de Destino", destinationFolder, typeof(DefaultAsset), false);
 
             if (meshMultiMat != null && meshMultiMat.blendShapeCount > 0)
             {
                 EditorGUILayout.HelpBox("Esta malla tiene blend shapes. Los submeshes generados no los incluirán.", MessageType.Warning);
             }
 
+            bool hasMultipleSubmeshes = meshMultiMat != null && meshMultiMat.subMeshCount > 1;
+
+            if (meshMultiMat == null)
+            {
+                EditorGUILayout.HelpBox("Arrastra una Mesh en el paso 1 para continuar.", MessageType.Info);
+            }
+            else if (!hasMultipleSubmeshes)
+            {
+                EditorGUILayout.HelpBox("La malla seleccionada no tiene varios submeshes; no hay nada que separar.", MessageType.Warning);
+            }
+            else if (destinationFolder == null)
+            {
+                EditorGUILayout.HelpBox("Arrastra una carpeta del proyecto en el paso 2 para continuar.", MessageType.Info);
+            }
+
             GUILayout.Space(20);
 
             // Botón para dividir y guardar los submeshes
-            if (GUILayout.Button("Dividir y Guardar Submeshes"))
+            using (new EditorGUI.DisabledScope(!hasMultipleSubmeshes || destinationFolder == null))
             {
-                if (meshMultiMat != null && destinationFolder != null)
+                if (GUILayout.Button("Dividir y Guardar Submeshes"))
                 {
                     SplitAndSaveSubmeshes();
-                }
-                else
-                {
-                    Debug.LogWarning("Por favor, selecciona una Mesh y una carpeta de destino.");
                 }
             }
         }

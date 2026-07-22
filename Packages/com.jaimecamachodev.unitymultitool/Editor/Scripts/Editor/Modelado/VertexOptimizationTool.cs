@@ -105,9 +105,27 @@ namespace JaimeCamachoDev.Multitool.Modeling
 
             GUILayout.Space(10);
 
-            if (GUILayout.Button("Analizar visibilidad"))
+            bool hasValidTarget = false;
+            foreach (GameObject go in targetObjects)
             {
-                Analyze();
+                if (go != null)
+                {
+                    hasValidTarget = true;
+                    break;
+                }
+            }
+
+            if (!hasValidTarget)
+            {
+                EditorGUILayout.HelpBox("Arrastra al menos un objeto en el paso 1 para poder analizar su visibilidad.", MessageType.Info);
+            }
+
+            using (new EditorGUI.DisabledScope(!hasValidTarget))
+            {
+                if (GUILayout.Button("Analizar visibilidad"))
+                {
+                    Analyze();
+                }
             }
 
             if (analyses.Count == 0)

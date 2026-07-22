@@ -53,24 +53,50 @@ namespace JaimeCamachoDev.Multitool.Modeling
 
             GUILayout.Space(20);
 
-            // Botón para previsualizar el recorte
-            if (GUILayout.Button("Preview clip"))
+            bool hasValidObjects = gameObjectsToModify.Any(o => o != null);
+            bool hasPreview = originalMeshes.Count > 0;
+
+            if (!hasValidObjects)
             {
-                PreviewMeshModification();
+                EditorGUILayout.HelpBox("Arrastra al menos un objeto en el paso 1 antes de previsualizar.", MessageType.Info);
+            }
+            else if (clippingPlane == null)
+            {
+                EditorGUILayout.HelpBox("Arrastra un plano de recorte en el paso 2 antes de previsualizar.", MessageType.Info);
+            }
+
+            // Botón para previsualizar el recorte
+            using (new EditorGUI.DisabledScope(!hasValidObjects || clippingPlane == null))
+            {
+                if (GUILayout.Button("Preview clip"))
+                {
+                    PreviewMeshModification();
+                }
             }
 
             // Botón para deshacer la vista previa y restaurar las mallas originales
-            if (GUILayout.Button("Undo preview"))
+            using (new EditorGUI.DisabledScope(!hasPreview))
             {
-                RestoreOriginalMeshes();
+                if (GUILayout.Button("Undo preview"))
+                {
+                    RestoreOriginalMeshes();
+                }
             }
 
             GUILayout.Space(20);
 
-            // Botón para guardar los cambios y reemplazar las mallas originales
-            if (GUILayout.Button("Save changes"))
+            if (!hasPreview)
             {
-                SaveModifiedMeshes();
+                EditorGUILayout.HelpBox("Pulsa \"Preview clip\" antes de guardar los cambios.", MessageType.Info);
+            }
+
+            // Botón para guardar los cambios y reemplazar las mallas originales
+            using (new EditorGUI.DisabledScope(!hasPreview))
+            {
+                if (GUILayout.Button("Save changes"))
+                {
+                    SaveModifiedMeshes();
+                }
             }
         }
 

@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEditor;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace JaimeCamachoDev.Multitool.Modeling
 {
@@ -66,16 +67,35 @@ namespace JaimeCamachoDev.Multitool.Modeling
                 selectedMeshFilters.RemoveAt(indexToRemove);
             }
 
-            // Botón para ajustar UVs
-            if (GUILayout.Button("Adjust UVs"))
+            bool hasValidFilters = selectedMeshFilters.Any(f => f != null);
+            bool hasValidGrid = rows > 0 && columns > 0;
+            bool hasBackup = originalUVs.Count > 0;
+
+            if (!hasValidFilters)
             {
-                AdjustUVs();
+                EditorGUILayout.HelpBox("Añade al menos un Mesh Filter para poder ajustar sus UVs.", MessageType.Info);
+            }
+            else if (!hasValidGrid)
+            {
+                EditorGUILayout.HelpBox("Rows y Columns deben ser mayores que 0.", MessageType.Warning);
+            }
+
+            // Botón para ajustar UVs
+            using (new EditorGUI.DisabledScope(!hasValidFilters || !hasValidGrid))
+            {
+                if (GUILayout.Button("Adjust UVs"))
+                {
+                    AdjustUVs();
+                }
             }
 
             // Botón para deshacer los cambios
-            if (GUILayout.Button("Undo last change"))
+            using (new EditorGUI.DisabledScope(!hasBackup))
             {
-                UndoUVChanges();
+                if (GUILayout.Button("Undo last change"))
+                {
+                    UndoUVChanges();
+                }
             }
         }
 
