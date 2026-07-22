@@ -13,7 +13,7 @@ namespace JaimeCamachoDev.Multitool.Modeling
         {
             GUILayout.Label("Multi-Material Finder", EditorStyles.boldLabel);
 
-            // Bot�n para encontrar los objetos
+            // Botón para encontrar los objetos
             if (GUILayout.Button("Find Objects with Multiple Materials"))
             {
                 FindObjectsWithMultipleMaterials();
