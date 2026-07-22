@@ -1,7 +1,9 @@
 using System.Collections.Generic;
 using System.IO;
 using UnityEditor;
+using UnityEditor.UIElements;
 using UnityEngine;
+using UnityEngine.UIElements;
 
 namespace JaimeCamachoDev.Multitool.Modeling
 {
@@ -68,130 +70,234 @@ namespace JaimeCamachoDev.Multitool.Modeling
             Selection.selectionChanged -= OnSelectionChanged;
         }
 
-        public static void DrawTool()
+        public static VisualElement CreateGUI()
         {
-            GUILayout.Label("Pivot mover & aligner", EditorStyles.boldLabel);
-            EditorGUILayout.HelpBox("Mueve el pivote de props estáticos usando el gizmo cyan en la escena o presets alineados al bound.", MessageType.Info);
+            var root = new VisualElement();
+            root.Add(new Label("Pivot mover & aligner") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginBottom = 6 } });
+            root.Add(new HelpBox("Mueve el pivote de props estáticos usando el gizmo cyan en la escena o presets alineados al bound.", HelpBoxMessageType.Info));
 
-            if (Selection.gameObjects.Length == 0)
-            {
-                EditorGUILayout.HelpBox("Selecciona uno o más objetos para modificar su pivote.", MessageType.Warning);
-                return;
-            }
+            var contentContainer = new VisualElement { style = { marginTop = 6 } };
+            root.Add(contentContainer);
 
-            PivotAnchor newAnchor = (PivotAnchor)EditorGUILayout.EnumPopup("Preset de pivote", pivotAnchor);
-            if (newAnchor != pivotAnchor)
+            void RefreshContent()
             {
-                pivotAnchor = newAnchor;
-                if (pivotAnchor != PivotAnchor.Custom)
+                contentContainer.Clear();
+
+                if (Selection.gameObjects.Length == 0)
                 {
-                    UpdateHandleFromSelection(false);
-                }
-            }
-
-            includeChildrenBounds = EditorGUILayout.ToggleLeft("Calcular bounds incluyendo hijos", includeChildrenBounds);
-            applyPerObject = EditorGUILayout.ToggleLeft("Calcular preset por objeto", applyPerObject);
-
-            showAdvancedOptions = EditorGUILayout.Foldout(showAdvancedOptions, "Ajustes avanzados", true);
-            if (showAdvancedOptions)
-            {
-                EditorGUI.indentLevel++;
-                preserveChildren = EditorGUILayout.ToggleLeft("Mantener posición global de los hijos", preserveChildren);
-                updateMeshColliders = EditorGUILayout.ToggleLeft("Actualizar MeshCollider si existe", updateMeshColliders);
-                createNewMeshInstance = EditorGUILayout.ToggleLeft("Duplicar mesh antes de editar", createNewMeshInstance);
-                using (new EditorGUI.DisabledScope(!createNewMeshInstance))
-                {
-                    saveNewMeshAsAsset = EditorGUILayout.ToggleLeft("Guardar mesh duplicado como asset", saveNewMeshAsAsset);
-                    EditorGUI.indentLevel++;
-                    pivotAssetFolder = (DefaultAsset)EditorGUILayout.ObjectField("Carpeta destino", pivotAssetFolder, typeof(DefaultAsset), false);
-                    EditorGUI.indentLevel--;
-                }
-                alignHandleToActiveRotation = EditorGUILayout.ToggleLeft("Alinear gizmo a la rotación del activo", alignHandleToActiveRotation);
-                enablePivotGridSnap = EditorGUILayout.ToggleLeft("Activar snap en la escena", enablePivotGridSnap);
-                using (new EditorGUI.DisabledScope(!enablePivotGridSnap))
-                {
-                    pivotGridSize = EditorGUILayout.FloatField("Tamaño del snap (m)", Mathf.Max(0.001f, pivotGridSize));
-                }
-                EditorGUI.indentLevel--;
-            }
-
-            GUILayout.Space(6f);
-
-            if (pivotAnchor == PivotAnchor.Custom)
-            {
-                customPivotWorld = EditorGUILayout.Vector3Field("Pivote personalizado (mundo)", customPivotWorld);
-                if (GUILayout.Button("Centrar gizmo en objeto activo"))
-                {
-                    UpdateHandleFromSelection(true);
-                }
-            }
-            else
-            {
-                EditorGUILayout.HelpBox("El pivote se tomará del preset seleccionado. Puedes refinarlo moviendo el gizmo.", MessageType.None);
-            }
-
-            GUILayout.Space(6f);
-
-            showReferenceOptions = EditorGUILayout.Foldout(showReferenceOptions, "Referencia externa", true);
-            if (showReferenceOptions)
-            {
-                EditorGUI.indentLevel++;
-                bool useReferenceBefore = useReferenceObject;
-                useReferenceObject = EditorGUILayout.ToggleLeft("Usar objeto como referencia", useReferenceObject);
-                if (useReferenceObject && !useReferenceBefore)
-                {
-                    AlignGizmoToReference(true);
+                    contentContainer.Add(new HelpBox("Selecciona uno o más objetos para modificar su pivote.", HelpBoxMessageType.Warning));
+                    return;
                 }
 
-                using (new EditorGUI.DisabledScope(!useReferenceObject))
+                var customPivotContainer = new VisualElement();
+                void RefreshCustomPivotSection()
+                {
+                    customPivotContainer.Clear();
+                    if (pivotAnchor == PivotAnchor.Custom)
+                    {
+                        var pivotField = new Vector3Field("Pivote personalizado (mundo)") { value = customPivotWorld };
+                        pivotField.RegisterValueChangedCallback(evt => customPivotWorld = evt.newValue);
+                        customPivotContainer.Add(pivotField);
+
+                        customPivotContainer.Add(new Button(() =>
+                        {
+                            UpdateHandleFromSelection(true);
+                            var field = customPivotContainer.Q<Vector3Field>();
+                            field?.SetValueWithoutNotify(customPivotWorld);
+                        })
+                        { text = "Centrar gizmo en objeto activo" });
+                    }
+                    else
+                    {
+                        customPivotContainer.Add(new HelpBox("El pivote se tomará del preset seleccionado. Puedes refinarlo moviendo el gizmo.", HelpBoxMessageType.None));
+                    }
+                }
+
+                var pivotAnchorField = new EnumField("Preset de pivote", pivotAnchor);
+                pivotAnchorField.RegisterValueChangedCallback(evt =>
+                {
+                    PivotAnchor newAnchor = (PivotAnchor)evt.newValue;
+                    if (newAnchor != pivotAnchor)
+                    {
+                        pivotAnchor = newAnchor;
+                        if (pivotAnchor != PivotAnchor.Custom)
+                        {
+                            UpdateHandleFromSelection(false);
+                        }
+                        RefreshCustomPivotSection();
+                    }
+                });
+                contentContainer.Add(pivotAnchorField);
+
+                var includeChildrenBoundsToggle = new Toggle("Calcular bounds incluyendo hijos") { value = includeChildrenBounds };
+                includeChildrenBoundsToggle.RegisterValueChangedCallback(evt => includeChildrenBounds = evt.newValue);
+                contentContainer.Add(includeChildrenBoundsToggle);
+
+                var applyPerObjectToggle = new Toggle("Calcular preset por objeto") { value = applyPerObject };
+                applyPerObjectToggle.RegisterValueChangedCallback(evt => applyPerObject = evt.newValue);
+                contentContainer.Add(applyPerObjectToggle);
+
+                var advancedFoldout = new Foldout { text = "Ajustes avanzados", value = showAdvancedOptions, style = { marginTop = 6 } };
+                advancedFoldout.RegisterValueChangedCallback(evt => showAdvancedOptions = evt.newValue);
+
+                var preserveChildrenToggle = new Toggle("Mantener posición global de los hijos") { value = preserveChildren };
+                preserveChildrenToggle.RegisterValueChangedCallback(evt => preserveChildren = evt.newValue);
+                advancedFoldout.Add(preserveChildrenToggle);
+
+                var updateMeshCollidersToggle = new Toggle("Actualizar MeshCollider si existe") { value = updateMeshColliders };
+                updateMeshCollidersToggle.RegisterValueChangedCallback(evt => updateMeshColliders = evt.newValue);
+                advancedFoldout.Add(updateMeshCollidersToggle);
+
+                var createNewMeshInstanceToggle = new Toggle("Duplicar mesh antes de editar") { value = createNewMeshInstance };
+                advancedFoldout.Add(createNewMeshInstanceToggle);
+
+                var saveNewMeshAsAssetToggle = new Toggle("Guardar mesh duplicado como asset") { value = saveNewMeshAsAsset, style = { marginLeft = 15 } };
+                var pivotAssetFolderField = new ObjectField("Carpeta destino") { objectType = typeof(DefaultAsset), allowSceneObjects = false, value = pivotAssetFolder, style = { marginLeft = 30 } };
+                saveNewMeshAsAssetToggle.SetEnabled(createNewMeshInstance);
+                pivotAssetFolderField.SetEnabled(createNewMeshInstance);
+                createNewMeshInstanceToggle.RegisterValueChangedCallback(evt =>
+                {
+                    createNewMeshInstance = evt.newValue;
+                    saveNewMeshAsAssetToggle.SetEnabled(createNewMeshInstance);
+                    pivotAssetFolderField.SetEnabled(createNewMeshInstance);
+                });
+                saveNewMeshAsAssetToggle.RegisterValueChangedCallback(evt => saveNewMeshAsAsset = evt.newValue);
+                pivotAssetFolderField.RegisterValueChangedCallback(evt => pivotAssetFolder = evt.newValue as DefaultAsset);
+                advancedFoldout.Add(saveNewMeshAsAssetToggle);
+                advancedFoldout.Add(pivotAssetFolderField);
+
+                var alignHandleToggle = new Toggle("Alinear gizmo a la rotación del activo") { value = alignHandleToActiveRotation };
+                alignHandleToggle.RegisterValueChangedCallback(evt => alignHandleToActiveRotation = evt.newValue);
+                advancedFoldout.Add(alignHandleToggle);
+
+                var enableSnapToggle = new Toggle("Activar snap en la escena") { value = enablePivotGridSnap };
+                var gridSizeField = new FloatField("Tamaño del snap (m)") { value = Mathf.Max(0.001f, pivotGridSize) };
+                gridSizeField.SetEnabled(enablePivotGridSnap);
+                enableSnapToggle.RegisterValueChangedCallback(evt =>
+                {
+                    enablePivotGridSnap = evt.newValue;
+                    gridSizeField.SetEnabled(enablePivotGridSnap);
+                });
+                gridSizeField.RegisterValueChangedCallback(evt => pivotGridSize = Mathf.Max(0.001f, evt.newValue));
+                advancedFoldout.Add(enableSnapToggle);
+                advancedFoldout.Add(gridSizeField);
+
+                contentContainer.Add(advancedFoldout);
+
+                RefreshCustomPivotSection();
+                contentContainer.Add(customPivotContainer);
+
+                var referenceHelpBoxContainer = new VisualElement();
+                void RefreshReferenceHelpBox()
+                {
+                    referenceHelpBoxContainer.Clear();
+                    if (useReferenceObject && pivotReferenceObject != null && !autoFollowReference)
+                    {
+                        referenceHelpBoxContainer.Add(new HelpBox("El gizmo usa la posición de la referencia actual pero el seguimiento automático está desactivado.", HelpBoxMessageType.Info));
+                    }
+                }
+
+                var referenceFoldout = new Foldout { text = "Referencia externa", value = showReferenceOptions, style = { marginTop = 6 } };
+                referenceFoldout.RegisterValueChangedCallback(evt => showReferenceOptions = evt.newValue);
+
+                var useReferenceToggle = new Toggle("Usar objeto como referencia") { value = useReferenceObject };
+                referenceFoldout.Add(useReferenceToggle);
+
+                var referenceObjectField = new ObjectField("Objeto de referencia") { objectType = typeof(GameObject), allowSceneObjects = true, value = pivotReferenceObject, style = { marginLeft = 15 } };
+                var referenceUseBoundsToggle = new Toggle("Tomar centro del bound de la referencia") { value = referenceUseBounds, style = { marginLeft = 15 } };
+                var referenceOffsetField = new Vector3Field("Offset local adicional") { value = referenceLocalOffset, style = { marginLeft = 15 } };
+                var autoFollowToggle = new Toggle("Mantener gizmo sincronizado con la referencia") { value = autoFollowReference, style = { marginLeft = 15 } };
+                var alignButton = new Button(() => AlignGizmoToReference(true)) { text = "Alinear gizmo a la referencia", style = { marginLeft = 15 } };
+
+                void SetReferenceControlsEnabled(bool enabled)
+                {
+                    referenceObjectField.SetEnabled(enabled);
+                    referenceUseBoundsToggle.SetEnabled(enabled);
+                    referenceOffsetField.SetEnabled(enabled);
+                    autoFollowToggle.SetEnabled(enabled);
+                    alignButton.SetEnabled(enabled);
+                }
+
+                SetReferenceControlsEnabled(useReferenceObject);
+
+                useReferenceToggle.RegisterValueChangedCallback(evt =>
+                {
+                    bool wasEnabled = useReferenceObject;
+                    useReferenceObject = evt.newValue;
+                    SetReferenceControlsEnabled(useReferenceObject);
+                    if (useReferenceObject && !wasEnabled)
+                    {
+                        AlignGizmoToReference(true);
+                    }
+                    RefreshReferenceHelpBox();
+                });
+
+                referenceObjectField.RegisterValueChangedCallback(evt =>
                 {
                     GameObject previousReference = pivotReferenceObject;
-                    pivotReferenceObject = (GameObject)EditorGUILayout.ObjectField("Objeto de referencia", pivotReferenceObject, typeof(GameObject), true);
+                    pivotReferenceObject = evt.newValue as GameObject;
                     if (pivotReferenceObject != null && pivotReferenceObject != previousReference)
                     {
                         AlignGizmoToReference(true);
                     }
-                    bool previousReferenceBounds = referenceUseBounds;
-                    referenceUseBounds = EditorGUILayout.ToggleLeft("Tomar centro del bound de la referencia", referenceUseBounds);
-                    if (autoFollowReference && referenceUseBounds != previousReferenceBounds)
-                    {
-                        AlignGizmoToReference(true);
-                    }
+                    RefreshReferenceHelpBox();
+                });
 
-                    Vector3 previousOffset = referenceLocalOffset;
-                    referenceLocalOffset = EditorGUILayout.Vector3Field("Offset local adicional", referenceLocalOffset);
-                    if (autoFollowReference && previousOffset != referenceLocalOffset)
-                    {
-                        AlignGizmoToReference(true);
-                    }
-                    bool previousAutoFollow = autoFollowReference;
-                    autoFollowReference = EditorGUILayout.ToggleLeft("Mantener gizmo sincronizado con la referencia", autoFollowReference);
-                    if (autoFollowReference && !previousAutoFollow)
-                    {
-                        AlignGizmoToReference(true);
-                    }
-                    if (GUILayout.Button("Alinear gizmo a la referencia"))
-                    {
-                        AlignGizmoToReference(true);
-                    }
-                }
-                EditorGUI.indentLevel--;
-            }
-
-            if (useReferenceObject && pivotReferenceObject != null && !autoFollowReference)
-            {
-                EditorGUILayout.HelpBox("El gizmo usa la posición de la referencia actual pero el seguimiento automático está desactivado.", MessageType.Info);
-            }
-
-            GUILayout.Space(10f);
-
-            using (new EditorGUI.DisabledScope(Selection.gameObjects.Length == 0))
-            {
-                if (GUILayout.Button("Aplicar pivote a la selección"))
+                referenceUseBoundsToggle.RegisterValueChangedCallback(evt =>
                 {
-                    ApplyPivotToSelection();
-                }
+                    bool previous = referenceUseBounds;
+                    referenceUseBounds = evt.newValue;
+                    if (autoFollowReference && referenceUseBounds != previous)
+                    {
+                        AlignGizmoToReference(true);
+                    }
+                });
+
+                referenceOffsetField.RegisterValueChangedCallback(evt =>
+                {
+                    Vector3 previous = referenceLocalOffset;
+                    referenceLocalOffset = evt.newValue;
+                    if (autoFollowReference && previous != referenceLocalOffset)
+                    {
+                        AlignGizmoToReference(true);
+                    }
+                });
+
+                autoFollowToggle.RegisterValueChangedCallback(evt =>
+                {
+                    bool previous = autoFollowReference;
+                    autoFollowReference = evt.newValue;
+                    if (autoFollowReference && !previous)
+                    {
+                        AlignGizmoToReference(true);
+                    }
+                    RefreshReferenceHelpBox();
+                });
+
+                referenceFoldout.Add(referenceObjectField);
+                referenceFoldout.Add(referenceUseBoundsToggle);
+                referenceFoldout.Add(referenceOffsetField);
+                referenceFoldout.Add(autoFollowToggle);
+                referenceFoldout.Add(alignButton);
+
+                contentContainer.Add(referenceFoldout);
+
+                RefreshReferenceHelpBox();
+                contentContainer.Add(referenceHelpBoxContainer);
+
+                contentContainer.Add(new Button(ApplyPivotToSelection)
+                {
+                    text = "Aplicar pivote a la selección",
+                    style = { marginTop = 10 }
+                });
             }
+
+            root.RegisterCallback<AttachToPanelEvent>(_ => Selection.selectionChanged += RefreshContent);
+            root.RegisterCallback<DetachFromPanelEvent>(_ => Selection.selectionChanged -= RefreshContent);
+
+            RefreshContent();
+
+            return root;
         }
 
         private static void OnSceneGUI(SceneView sceneView)

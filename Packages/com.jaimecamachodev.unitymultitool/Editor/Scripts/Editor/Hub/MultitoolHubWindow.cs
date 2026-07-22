@@ -188,7 +188,7 @@ namespace JaimeCamachoDev.Multitool
             toolBuilders["Vertex ID Display"] = VertexIDDisplayerTool.CreateGUI;
             toolBuilders["Micro triangle detector"] = MicroTrianglesDetectorTool.CreateGUI;
             toolDrawers["Advanced mesh combiner"] = MeshCombinerTool.DrawTool;
-            toolDrawers["Pivot mover & aligner"] = PivotAdjusterTool.DrawTool;
+            toolBuilders["Pivot mover & aligner"] = PivotAdjusterTool.CreateGUI;
             toolBuilders["Reset XForm"] = ResetTransformTool.CreateGUI;
             toolBuilders["Remove not visible vertex"] = VertexOptimizationTool.CreateGUI;
             toolBuilders["Recalculate Mesh Bounds"] = RecalculateMeshBoundsTool.CreateGUI;
