@@ -124,11 +124,11 @@ namespace JaimeCamachoDev.Multitool
             toolDescriptions["Advanced mesh combiner"] = "Combina múltiples objetos estáticos o skinned en un único mesh optimizado.";
             toolDescriptions["Pivot mover & aligner"] = "Ajusta el pivote de uno o varios objetos con presets o gizmo interactivo.";
             toolDescriptions["Merge mesh and create atlas"] = "Combina mallas en una sola malla y optimiza sus materiales en un atlas listo para uso inmediato.";
-            toolDescriptions["Remove not visible vertex"] = "Limpia vrtices ocultos para reducir el peso de tus modelos (en desarrollo).";
-            toolDescriptions["Hollow shell"] = "Genera una versin hueca del mesh para props o elementos ligeros.";
-            toolDescriptions["Multi material Finder"] = "Detecta rpidamente los materiales utilizados por una malla.";
-            toolDescriptions["Multi material splitter"] = "Separa una malla segn los materiales asignados.";
-            toolDescriptions["Vertex ID Display"] = "Visualiza IDs de vrtice directamente en la escena para depurar.";
+            toolDescriptions["Remove not visible vertex"] = "Detecta y elimina caras completamente ocultas tras otra geometría para reducir el peso de tus modelos.";
+            toolDescriptions["Hollow shell"] = "Genera una versión hueca del mesh para props o elementos ligeros.";
+            toolDescriptions["Multi material Finder"] = "Detecta rápidamente los materiales utilizados por una malla.";
+            toolDescriptions["Multi material splitter"] = "Separa una malla según los materiales asignados.";
+            toolDescriptions["Vertex ID Display"] = "Visualiza IDs de vértice directamente en la escena para depurar.";
             toolDescriptions["Micro triangle detector"] = "Resalta los triángulos problemáticos que pueden generar artefactos.";
             toolDescriptions["Reset XForm"] = "Convierte la transformación actual en geometría para dejar el Transform en valores por defecto sin mover el objeto.";
 
@@ -188,6 +188,7 @@ namespace JaimeCamachoDev.Multitool
             toolDrawers["Advanced mesh combiner"] = MeshCombinerTool.DrawTool;
             toolDrawers["Pivot mover & aligner"] = PivotAdjusterTool.DrawTool;
             toolDrawers["Reset XForm"] = ResetTransformTool.DrawTool;
+            toolDrawers["Remove not visible vertex"] = VertexOptimizationTool.DrawTool;
             toolDrawers["Recalculate Mesh Bounds"] = () =>
             {
                 if (Selection.activeGameObject != null)
@@ -212,6 +213,9 @@ namespace JaimeCamachoDev.Multitool
 
             toolActivations["Vertex ID Display"] = VertexIDDisplayerTool.EnableSceneView;
             toolDeactivations["Vertex ID Display"] = VertexIDDisplayerTool.DisableSceneView;
+
+            toolActivations["Remove not visible vertex"] = VertexOptimizationTool.EnableSceneView;
+            toolDeactivations["Remove not visible vertex"] = VertexOptimizationTool.DisableSceneView;
             toolDeactivations["Alembic to VAT"] = AlembicToVatTool.ResetState;
         }
 

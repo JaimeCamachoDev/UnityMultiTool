@@ -271,7 +271,7 @@ namespace VZOptizone
                     LightmapCheckerTool.DrawTool();
                     break;
                 case "Remove not visible vertex":
-                    //VertexOptimizationTool.DrawTool();
+                    VertexOptimizationTool.DrawTool();
                     break;
                 case "Hollow shell":
                     HollowShellMeshTool.DrawTool();
