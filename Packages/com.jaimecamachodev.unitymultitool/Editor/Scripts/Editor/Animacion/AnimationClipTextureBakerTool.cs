@@ -10,7 +10,8 @@ namespace VZOptizone
     {
         private static ComputeShader infoTexGen;
         private static GameObject targetObject;
-        private static string outputPath = "Assets/BakedAnimationTex";
+        private static DefaultAsset outputFolder;
+        private const string DefaultOutputPath = "Assets/BakedAnimationTex";
 
         public static void DrawTool()
         {
@@ -28,43 +29,54 @@ namespace VZOptizone
             // Campo para seleccionar el GameObject objetivo
             targetObject = EditorGUILayout.ObjectField("Target Object", targetObject, typeof(GameObject), true) as GameObject;
 
-            // Campo para ingresar la ruta de salida
-            EditorGUILayout.BeginHorizontal();
-            GUILayout.Label("Output Path:");
-            outputPath = EditorGUILayout.TextField(outputPath);
-            EditorGUILayout.EndHorizontal();
-
-            // Botón para seleccionar carpeta de salida
-            if (GUILayout.Button("Select Folder"))
+            // Carpeta de salida: arrastra una carpeta desde la ventana Project
+            DefaultAsset newFolder = (DefaultAsset)EditorGUILayout.ObjectField("Output Folder", outputFolder, typeof(DefaultAsset), false);
+            if (newFolder != outputFolder && newFolder != null)
             {
-                string selectedFolder = EditorUtility.OpenFolderPanel("Select Output Folder", "Assets", "");
-                if (!string.IsNullOrEmpty(selectedFolder))
+                string folderPath = AssetDatabase.GetAssetPath(newFolder);
+                if (AssetDatabase.IsValidFolder(folderPath))
                 {
-                    outputPath = selectedFolder.Replace(Application.dataPath, "Assets");
+                    outputFolder = newFolder;
+                }
+                else
+                {
+                    Debug.LogWarning("El objeto arrastrado no es una carpeta del proyecto.");
                 }
             }
-
-            // Botón para hornear texturas
-            if (GUILayout.Button("Bake Textures"))
+            else if (newFolder == null)
             {
-                if (infoTexGen == null)
-                {
-                    Debug.LogError("Compute Shader is not assigned!");
-                    return;
-                }
+                outputFolder = null;
+            }
 
-                if (targetObject == null)
-                {
-                    Debug.LogError("Target Object is not assigned!");
-                    return;
-                }
+            if (outputFolder == null)
+            {
+                EditorGUILayout.HelpBox($"Si no se asigna carpeta se usarÃ¡ '{DefaultOutputPath}'.", MessageType.Info);
+            }
 
-                BakeTextures();
+            if (targetObject == null)
+            {
+                EditorGUILayout.HelpBox("Arrastra un GameObject con Animator y SkinnedMeshRenderer en \"Target Object\" para poder hornear.", MessageType.Info);
+            }
+
+            GUILayout.Space(6f);
+
+            using (new EditorGUI.DisabledScope(infoTexGen == null || targetObject == null))
+            {
+                if (GUILayout.Button("Bake Textures"))
+                {
+                    BakeTextures();
+                }
             }
         }
 
         private static void BakeTextures()
         {
+            string outputPath = outputFolder != null ? AssetDatabase.GetAssetPath(outputFolder) : DefaultOutputPath;
+            if (!Directory.Exists(outputPath))
+            {
+                Directory.CreateDirectory(outputPath);
+            }
+
             var skin = targetObject.GetComponentInChildren<SkinnedMeshRenderer>();
             if (skin == null)
             {
