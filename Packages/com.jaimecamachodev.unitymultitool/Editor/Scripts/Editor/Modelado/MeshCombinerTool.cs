@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using System.IO;
 using UnityEditor;
@@ -195,6 +194,11 @@ namespace JaimeCamachoDev.Multitool.Modeling
                             diagnostics.skipped.Add(renderer.name + " (MeshFilter vacío)");
                             continue;
                         }
+                        if (!filter.sharedMesh.isReadable)
+                        {
+                            diagnostics.skipped.Add(renderer.name + " (mesh no legible: activa Read/Write en su Import Settings)");
+                            continue;
+                        }
                         diagnostics.meshRendererCount++;
                         diagnostics.estimatedSubmeshCount += filter.sharedMesh.subMeshCount;
                     }
@@ -210,6 +214,11 @@ namespace JaimeCamachoDev.Multitool.Modeling
                         if (skinned.sharedMesh == null)
                         {
                             diagnostics.skipped.Add(renderer.name + " (mesh vacío)");
+                            continue;
+                        }
+                        if (!skinned.sharedMesh.isReadable)
+                        {
+                            diagnostics.skipped.Add(renderer.name + " (mesh no legible: activa Read/Write en su Import Settings)");
                             continue;
                         }
                         diagnostics.skinnedRendererCount++;
@@ -228,7 +237,7 @@ namespace JaimeCamachoDev.Multitool.Modeling
 
             diagnostics.totalVertices = CalculateVertexCount(diagnostics.renderers);
             diagnostics.CaptureSamples();
-            diagnostics.notes.Add("Los renderers se combinan en espacio mundo y adoptan la rotación del activo seleccionado.");
+            diagnostics.notes.Add("Los vértices se combinan en espacio mundo; el objeto resultante queda con rotación y escala identidad.");
 
             if (!alignToBoundsCenter)
             {
@@ -361,7 +370,7 @@ namespace JaimeCamachoDev.Multitool.Modeling
                     combinedMesh.indexFormat = IndexFormat.UInt32;
                 }
 
-                combinedMesh.CombineMeshes(preparation.instances.ToArray(), false, false, false);
+                combinedMesh.CombineMeshes(preparation.instances.ToArray(), false, true, false);
                 combinedMesh.RecalculateBounds();
             }
             finally
@@ -469,12 +478,7 @@ namespace JaimeCamachoDev.Multitool.Modeling
                 }
 
                 Material[] materials = renderer.sharedMaterials;
-                int subMeshCount = Math.Min(mesh.subMeshCount, materials.Length);
-
-                if (subMeshCount == 0)
-                {
-                    subMeshCount = mesh.subMeshCount;
-                }
+                int subMeshCount = mesh.subMeshCount;
 
                 if (subMeshCount == 0)
                 {
