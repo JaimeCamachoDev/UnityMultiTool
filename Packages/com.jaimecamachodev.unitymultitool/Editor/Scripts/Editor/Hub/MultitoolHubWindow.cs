@@ -190,7 +190,7 @@ namespace JaimeCamachoDev.Multitool
             toolDrawers["Advanced mesh combiner"] = MeshCombinerTool.DrawTool;
             toolDrawers["Pivot mover & aligner"] = PivotAdjusterTool.DrawTool;
             toolDrawers["Reset XForm"] = ResetTransformTool.DrawTool;
-            toolDrawers["Remove not visible vertex"] = VertexOptimizationTool.DrawTool;
+            toolBuilders["Remove not visible vertex"] = VertexOptimizationTool.CreateGUI;
             toolBuilders["Recalculate Mesh Bounds"] = RecalculateMeshBoundsTool.CreateGUI;
 
             toolActivations["Recalculate Mesh Bounds"] = RecalculateMeshBoundsTool.EnableSceneView;

@@ -106,7 +106,7 @@ namespace JaimeCamachoDev.Multitool.Modeling
             root.Add(clippingPlaneField);
 
             root.Add(new Label("3. Select clip direction") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginTop = 10 } });
-            var clipDirectionField = new EnumField(clipDirection);
+            var clipDirectionField = new EnumField("Clip Direction", clipDirection);
             clipDirectionField.RegisterValueChangedCallback(evt => clipDirection = (ClipDirection)evt.newValue);
             root.Add(clipDirectionField);
 
