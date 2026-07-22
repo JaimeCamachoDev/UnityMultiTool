@@ -36,6 +36,7 @@ namespace JaimeCamachoDev.Multitool.Modeling
         private static void GenerateUV2()
         {
             // Generar UV2 para la malla seleccionada
+            Undo.RecordObject(selectedMesh, "Generar UV2");
             Unwrapping.GenerateSecondaryUVSet(selectedMesh);
 
             // Guardar los cambios en la malla
