@@ -1,5 +1,7 @@
-using UnityEngine;
 using UnityEditor;
+using UnityEditor.UIElements;
+using UnityEngine;
+using UnityEngine.UIElements;
 
 namespace JaimeCamachoDev.Multitool.Modeling
 {
@@ -7,29 +9,43 @@ namespace JaimeCamachoDev.Multitool.Modeling
     {
         private static Mesh selectedMesh;
 
-        public static void DrawTool()
+        public static VisualElement CreateGUI()
         {
-            GUILayout.Label("Generar UV2 para Lightmapping", EditorStyles.boldLabel);
+            var root = new VisualElement();
+            root.Add(new Label("Generar UV2 para Lightmapping") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginBottom = 6 } });
+
+            var statusContainer = new VisualElement();
+            var generateButton = new Button(GenerateUV2) { text = "Generar UV2", style = { marginTop = 6 } };
 
             // Campo para arrastrar y soltar la malla
-            selectedMesh = (Mesh)EditorGUILayout.ObjectField("Malla para Generar UV2", selectedMesh, typeof(Mesh), false);
+            var meshField = new ObjectField("Malla para Generar UV2") { objectType = typeof(Mesh), allowSceneObjects = false, value = selectedMesh };
+            meshField.RegisterValueChangedCallback(evt =>
+            {
+                selectedMesh = evt.newValue as Mesh;
+                RefreshStatus(statusContainer);
+                generateButton.SetEnabled(selectedMesh != null);
+            });
+            root.Add(meshField);
+            root.Add(statusContainer);
+            root.Add(generateButton);
+
+            RefreshStatus(statusContainer);
+            generateButton.SetEnabled(selectedMesh != null);
+
+            return root;
+        }
+
+        private static void RefreshStatus(VisualElement container)
+        {
+            container.Clear();
 
             if (selectedMesh == null)
             {
-                EditorGUILayout.HelpBox("Arrastra una Mesh para poder generar su UV2.", MessageType.Info);
+                container.Add(new HelpBox("Arrastra una Mesh para poder generar su UV2.", HelpBoxMessageType.Info));
             }
             else if (AssetImporter.GetAtPath(AssetDatabase.GetAssetPath(selectedMesh)) is ModelImporter)
             {
-                EditorGUILayout.HelpBox("Esta malla proviene de un modelo importado (FBX/OBJ/etc). Los cambios se perderán al reimportar el modelo; considera duplicar la malla como un asset independiente antes de generar el UV2.", MessageType.Warning);
-            }
-
-            // Botón para generar el UV2
-            using (new EditorGUI.DisabledScope(selectedMesh == null))
-            {
-                if (GUILayout.Button("Generar UV2"))
-                {
-                    GenerateUV2();
-                }
+                container.Add(new HelpBox("Esta malla proviene de un modelo importado (FBX/OBJ/etc). Los cambios se perderán al reimportar el modelo; considera duplicar la malla como un asset independiente antes de generar el UV2.", HelpBoxMessageType.Warning));
             }
         }
 

@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEditor;
-using System.Collections.Generic;
+using UnityEditor.UIElements;
+using UnityEngine.UIElements;
 using System.IO;
 
 namespace JaimeCamachoDev.Multitool.Modeling
@@ -10,48 +11,65 @@ namespace JaimeCamachoDev.Multitool.Modeling
         private static Mesh meshMultiMat; // Mesh a dividir en submeshes
         private static DefaultAsset destinationFolder; // Carpeta donde se guardarán los submeshes
 
-        public static void DrawTool()
+        public static VisualElement CreateGUI()
         {
-            GUILayout.Label("Separar Submeshes por Material", EditorStyles.boldLabel);
+            var root = new VisualElement();
+            root.Add(new Label("Separar Submeshes por Material") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginBottom = 6 } });
 
-            GUILayout.Label("1. Arrastra la malla a dividir", EditorStyles.boldLabel);
-            meshMultiMat = (Mesh)EditorGUILayout.ObjectField("Mesh", meshMultiMat, typeof(Mesh), true);
+            var statusContainer = new VisualElement { style = { marginTop = 6 } };
+            var splitButton = new Button(SplitAndSaveSubmeshes) { text = "Dividir y Guardar Submeshes", style = { marginTop = 10 } };
 
-            GUILayout.Space(10);
+            root.Add(new Label("1. Arrastra la malla a dividir") { style = { unityFontStyleAndWeight = FontStyle.Bold } });
+            var meshField = new ObjectField("Mesh") { objectType = typeof(Mesh), allowSceneObjects = true, value = meshMultiMat };
+            meshField.RegisterValueChangedCallback(evt =>
+            {
+                meshMultiMat = evt.newValue as Mesh;
+                RefreshStatus(statusContainer, splitButton);
+            });
+            root.Add(meshField);
 
-            GUILayout.Label("2. Arrastra la carpeta de destino", EditorStyles.boldLabel);
-            destinationFolder = (DefaultAsset)EditorGUILayout.ObjectField("Carpeta de Destino", destinationFolder, typeof(DefaultAsset), false);
+            root.Add(new Label("2. Arrastra la carpeta de destino") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginTop = 10 } });
+            var folderField = new ObjectField("Carpeta de Destino") { objectType = typeof(DefaultAsset), allowSceneObjects = false, value = destinationFolder };
+            folderField.RegisterValueChangedCallback(evt =>
+            {
+                destinationFolder = evt.newValue as DefaultAsset;
+                RefreshStatus(statusContainer, splitButton);
+            });
+            root.Add(folderField);
+
+            root.Add(statusContainer);
+            root.Add(splitButton);
+
+            RefreshStatus(statusContainer, splitButton);
+
+            return root;
+        }
+
+        private static void RefreshStatus(VisualElement container, Button splitButton)
+        {
+            container.Clear();
 
             if (meshMultiMat != null && meshMultiMat.blendShapeCount > 0)
             {
-                EditorGUILayout.HelpBox("Esta malla tiene blend shapes. Los submeshes generados no los incluirán.", MessageType.Warning);
+                container.Add(new HelpBox("Esta malla tiene blend shapes. Los submeshes generados no los incluirán.", HelpBoxMessageType.Warning));
             }
 
             bool hasMultipleSubmeshes = meshMultiMat != null && meshMultiMat.subMeshCount > 1;
 
             if (meshMultiMat == null)
             {
-                EditorGUILayout.HelpBox("Arrastra una Mesh en el paso 1 para continuar.", MessageType.Info);
+                container.Add(new HelpBox("Arrastra una Mesh en el paso 1 para continuar.", HelpBoxMessageType.Info));
             }
             else if (!hasMultipleSubmeshes)
             {
-                EditorGUILayout.HelpBox("La malla seleccionada no tiene varios submeshes; no hay nada que separar.", MessageType.Warning);
+                container.Add(new HelpBox("La malla seleccionada no tiene varios submeshes; no hay nada que separar.", HelpBoxMessageType.Warning));
             }
             else if (destinationFolder == null)
             {
-                EditorGUILayout.HelpBox("Arrastra una carpeta del proyecto en el paso 2 para continuar.", MessageType.Info);
+                container.Add(new HelpBox("Arrastra una carpeta del proyecto en el paso 2 para continuar.", HelpBoxMessageType.Info));
             }
 
-            GUILayout.Space(20);
-
-            // Botón para dividir y guardar los submeshes
-            using (new EditorGUI.DisabledScope(!hasMultipleSubmeshes || destinationFolder == null))
-            {
-                if (GUILayout.Button("Dividir y Guardar Submeshes"))
-                {
-                    SplitAndSaveSubmeshes();
-                }
-            }
+            splitButton.SetEnabled(hasMultipleSubmeshes && destinationFolder != null);
         }
 
         private static void SplitAndSaveSubmeshes()

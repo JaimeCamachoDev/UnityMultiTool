@@ -181,9 +181,9 @@ namespace JaimeCamachoDev.Multitool
             toolDrawers["Renamer"] = RenameTool.DrawTool;
             toolDrawers["Hollow shell"] = HollowShellMeshTool.DrawTool;
             toolBuilders["Multi material Finder"] = MultiMaterialFinderTool.CreateGUI;
-            toolDrawers["Multi material splitter"] = MultimaterialMeshSplitterTool.DrawTool;
+            toolBuilders["Multi material splitter"] = MultimaterialMeshSplitterTool.CreateGUI;
             toolDrawers["Merge mesh and create atlas"] = MeshAtlasBakerTool.DrawTool;
-            toolDrawers["Generate mesh uv lightmaps"] = UV2GeneratorTool.DrawTool;
+            toolBuilders["Generate mesh uv lightmaps"] = UV2GeneratorTool.CreateGUI;
             toolDrawers["Move UV inside grid"] = UVAdjusterTool.DrawTool;
             toolBuilders["Vertex ID Display"] = VertexIDDisplayerTool.CreateGUI;
             toolBuilders["Micro triangle detector"] = MicroTrianglesDetectorTool.CreateGUI;
@@ -191,19 +191,7 @@ namespace JaimeCamachoDev.Multitool
             toolDrawers["Pivot mover & aligner"] = PivotAdjusterTool.DrawTool;
             toolDrawers["Reset XForm"] = ResetTransformTool.DrawTool;
             toolDrawers["Remove not visible vertex"] = VertexOptimizationTool.DrawTool;
-            toolDrawers["Recalculate Mesh Bounds"] = () =>
-            {
-                if (Selection.activeGameObject != null)
-                {
-                    MeshFilter meshFilter = Selection.activeGameObject.GetComponent<MeshFilter>();
-                    if (meshFilter != null)
-                    {
-                        RecalculateMeshBoundsTool.SetTarget(meshFilter);
-                    }
-                }
-
-                RecalculateMeshBoundsTool.DrawTool();
-            };
+            toolBuilders["Recalculate Mesh Bounds"] = RecalculateMeshBoundsTool.CreateGUI;
 
             toolActivations["Recalculate Mesh Bounds"] = RecalculateMeshBoundsTool.EnableSceneView;
             toolDeactivations["Recalculate Mesh Bounds"] = RecalculateMeshBoundsTool.DisableSceneView;
