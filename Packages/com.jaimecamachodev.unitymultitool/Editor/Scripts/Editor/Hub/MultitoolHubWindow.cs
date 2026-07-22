@@ -189,7 +189,7 @@ namespace JaimeCamachoDev.Multitool
             toolBuilders["Micro triangle detector"] = MicroTrianglesDetectorTool.CreateGUI;
             toolDrawers["Advanced mesh combiner"] = MeshCombinerTool.DrawTool;
             toolDrawers["Pivot mover & aligner"] = PivotAdjusterTool.DrawTool;
-            toolDrawers["Reset XForm"] = ResetTransformTool.DrawTool;
+            toolBuilders["Reset XForm"] = ResetTransformTool.CreateGUI;
             toolBuilders["Remove not visible vertex"] = VertexOptimizationTool.CreateGUI;
             toolBuilders["Recalculate Mesh Bounds"] = RecalculateMeshBoundsTool.CreateGUI;
 
