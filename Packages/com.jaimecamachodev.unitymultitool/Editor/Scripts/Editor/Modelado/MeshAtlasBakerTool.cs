@@ -514,6 +514,11 @@ namespace JaimeCamachoDev.Multitool.Modeling
                 customAtlasTexture = customGeneratedAtlas;
                 SetCustomStatus($"Atlas generado correctamente ({atlas.width}x{atlas.height}).", MessageType.Info);
             }
+            catch (Exception ex)
+            {
+                SetCustomStatus($"Error al generar el atlas: {ex.Message}", MessageType.Error);
+                Debug.LogException(ex);
+            }
             finally
             {
                 foreach (Texture2D copy in readableCopies)
@@ -814,6 +819,26 @@ namespace JaimeCamachoDev.Multitool.Modeling
             customUvPreviewDragEntryIndex = -1;
         }
 
+        private static void EnsureEditableCustomUvMesh(CustomUvPreviewEntry entry)
+        {
+            // El mesh de partida es filter.sharedMesh, el asset del proyecto. Escribir UVs
+            // directamente sobre él corrompería a cualquier otro objeto/prefab que lo comparta.
+            // La primera vez que se edita este entry, se duplica y el MeshFilter pasa a apuntar
+            // a la copia; el resto de operaciones de este entry ya trabajan sobre la copia.
+            if (entry.OwnsMesh || entry.Filter == null || entry.Mesh == null)
+            {
+                return;
+            }
+
+            Mesh duplicate = UnityEngine.Object.Instantiate(entry.Mesh);
+            duplicate.name = entry.Mesh.name + "_UVEdit";
+            Undo.RegisterCreatedObjectUndo(duplicate, "Duplicar mesh para edición de UV");
+            Undo.RecordObject(entry.Filter, "Asignar mesh editable");
+            entry.Filter.sharedMesh = duplicate;
+            entry.Mesh = duplicate;
+            entry.OwnsMesh = true;
+        }
+
         private static void ApplyActiveCustomUvTransform()
         {
             CustomUvPreviewEntry entry = GetActiveCustomUvPreviewEntry();
@@ -823,6 +848,7 @@ namespace JaimeCamachoDev.Multitool.Modeling
                 return;
             }
 
+            EnsureEditableCustomUvMesh(entry);
             Mesh mesh = entry.Mesh;
             if (mesh == null)
             {
@@ -848,6 +874,10 @@ namespace JaimeCamachoDev.Multitool.Modeling
 
             Undo.RecordObject(mesh, "Aplicar transformación UV");
             mesh.uv = transformed;
+            if (mesh.tangents != null && mesh.tangents.Length > 0)
+            {
+                mesh.RecalculateTangents();
+            }
             EditorUtility.SetDirty(mesh);
 
             if (entry.Filter != null)
@@ -874,6 +904,7 @@ namespace JaimeCamachoDev.Multitool.Modeling
                 return;
             }
 
+            EnsureEditableCustomUvMesh(entry);
             Mesh mesh = entry.Mesh;
             if (mesh == null)
             {
@@ -890,6 +921,10 @@ namespace JaimeCamachoDev.Multitool.Modeling
             Vector2[] restored = (Vector2[])entry.InitialUvs.Clone();
             Undo.RecordObject(mesh, "Restaurar UV originales");
             mesh.uv = restored;
+            if (mesh.tangents != null && mesh.tangents.Length > 0)
+            {
+                mesh.RecalculateTangents();
+            }
             EditorUtility.SetDirty(mesh);
 
             if (entry.Filter != null)
@@ -1248,6 +1283,10 @@ namespace JaimeCamachoDev.Multitool.Modeling
             }
 
             mesh.uv = transformed;
+            if (mesh.tangents != null && mesh.tangents.Length > 0)
+            {
+                mesh.RecalculateTangents();
+            }
         }
 
         private static SelectionContext BuildSelectionContext(out string message, out MessageType messageType)
@@ -1335,6 +1374,19 @@ namespace JaimeCamachoDev.Multitool.Modeling
                             : null;
                         context.AddMaterial(material);
                     }
+                }
+
+                // SkinnedMeshRenderer no está soportado por este baker; se reportan en vez de
+                // desaparecer en silencio de la selección.
+                SkinnedMeshRenderer[] skinnedRenderers = root.GetComponentsInChildren<SkinnedMeshRenderer>(true);
+                foreach (SkinnedMeshRenderer skinnedRenderer in skinnedRenderers)
+                {
+                    if (skinnedRenderer == null || !processed.Add(skinnedRenderer.GetInstanceID()))
+                    {
+                        continue;
+                    }
+
+                    context.Skipped.Add(skinnedRenderer.name + " (SkinnedMeshRenderer no soportado)");
                 }
             }
 
@@ -1513,12 +1565,21 @@ namespace JaimeCamachoDev.Multitool.Modeling
                     atlasTexture = new Texture2D(atlasSizes[atlasSizeIndex], atlasSizes[atlasSizeIndex], TextureFormat.RGBA32, false);
                     Rect[] rects = atlasTexture.PackTextures(textureCopies.ToArray(), atlasPadding, atlasSizes[atlasSizeIndex], false);
 
+                    if (rects == null)
+                    {
+                        EditorUtility.DisplayDialog("Material Atlas", $"Las {textureCopies.Count} texturas no caben en un atlas de {atlasSizes[atlasSizeIndex]}px con el padding actual ({atlasPadding}px). Prueba con un tamaño de atlas mayor o reduce el padding.", "Entendido");
+                        UnityEngine.Object.DestroyImmediate(atlasTexture);
+                        atlasTexture = null;
+                        return;
+                    }
+
                     EditorUtility.DisplayProgressBar("Material Atlas", "Reasignando UVs...", 0.6f);
 
-                    atlasMesh = rects.Length == subMeshCount ? BuildAtlasMesh(workingMesh, rects) : null;
+                    string atlasMeshError = null;
+                    atlasMesh = rects.Length == subMeshCount ? BuildAtlasMesh(workingMesh, rects, out atlasMeshError) : null;
                     if (atlasMesh == null)
                     {
-                        EditorUtility.DisplayDialog("Material Atlas", "No se pudo generar la malla con el nuevo atlas.", "Entendido");
+                        EditorUtility.DisplayDialog("Material Atlas", string.IsNullOrEmpty(atlasMeshError) ? "No se pudo generar la malla con el nuevo atlas." : atlasMeshError, "Entendido");
                         if (atlasTexture != null)
                         {
                             UnityEngine.Object.DestroyImmediate(atlasTexture);
@@ -1567,7 +1628,29 @@ namespace JaimeCamachoDev.Multitool.Modeling
                 }
 
                 Material baseMaterial = materials.Length > 0 ? materials[0] : null;
-                Material atlasMaterial = baseMaterial != null ? new Material(baseMaterial) : new Material(Shader.Find("Standard"));
+                Material atlasMaterial;
+                if (baseMaterial != null)
+                {
+                    atlasMaterial = new Material(baseMaterial);
+                }
+                else
+                {
+                    Shader fallbackShader = Shader.Find("Standard");
+                    if (fallbackShader == null && GraphicsSettings.currentRenderPipeline != null)
+                    {
+                        fallbackShader = GraphicsSettings.currentRenderPipeline.defaultShader;
+                    }
+                    if (fallbackShader == null)
+                    {
+                        fallbackShader = Shader.Find("Unlit/Texture");
+                    }
+                    if (fallbackShader == null)
+                    {
+                        EditorUtility.DisplayDialog("Material Atlas", "No se encontró ningún shader por defecto ('Standard', el del render pipeline activo, ni 'Unlit/Texture') para crear el material del atlas.", "Entendido");
+                        return;
+                    }
+                    atlasMaterial = new Material(fallbackShader);
+                }
                 atlasMaterial.name = baseAssetName + "_Mat";
 
                 if (finalAtlas != null)
@@ -1731,6 +1814,7 @@ namespace JaimeCamachoDev.Multitool.Modeling
             public Vector2 TransformPosition = Vector2.zero;
             public Vector2 TransformScale = Vector2.one;
             public float TransformRotation;
+            public bool OwnsMesh;
 
             public bool IsValidIndex(int index)
             {
@@ -1881,8 +1965,10 @@ namespace JaimeCamachoDev.Multitool.Modeling
             return texture;
         }
 
-        private static Mesh BuildAtlasMesh(Mesh sourceMesh, IReadOnlyList<Rect> rects)
+        private static Mesh BuildAtlasMesh(Mesh sourceMesh, IReadOnlyList<Rect> rects, out string error)
         {
+            error = null;
+
             if (sourceMesh == null)
             {
                 return null;
@@ -1974,6 +2060,18 @@ namespace JaimeCamachoDev.Multitool.Modeling
 
                     triangles.Add(newVertices.Count - 1);
                 }
+            }
+
+            // Cada esquina de triángulo se convierte en un vértice propio (no se comparten vértices
+            // entre triángulos) para poder reasignar UVs de forma independiente por submesh. Esto
+            // puede multiplicar el recuento de vértices original varias veces. Unity limita las
+            // mallas a 65.535 vértices salvo que se usen índices de 32 bits, y este baker no está
+            // preparado para generarlos ni para soldar vértices duplicados, así que se avisa y se
+            // aborta en vez de generar una malla truncada o corrupta.
+            if (newVertices.Count > 65535)
+            {
+                error = $"La malla resultante del atlas necesitaría {newVertices.Count} vértices (el proceso genera un vértice por cada esquina de triángulo), por encima del límite de 65.535 que soporta esta herramienta. Reduce la selección, usa un LOD más simple o divide el bake en varios grupos más pequeños.";
+                return null;
             }
 
             Mesh atlasMesh = new Mesh
