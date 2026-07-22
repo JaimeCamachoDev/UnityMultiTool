@@ -187,7 +187,7 @@ namespace JaimeCamachoDev.Multitool
             toolBuilders["Move UV inside grid"] = UVAdjusterTool.CreateGUI;
             toolBuilders["Vertex ID Display"] = VertexIDDisplayerTool.CreateGUI;
             toolBuilders["Micro triangle detector"] = MicroTrianglesDetectorTool.CreateGUI;
-            toolDrawers["Advanced mesh combiner"] = MeshCombinerTool.DrawTool;
+            toolBuilders["Advanced mesh combiner"] = MeshCombinerTool.CreateGUI;
             toolBuilders["Pivot mover & aligner"] = PivotAdjusterTool.CreateGUI;
             toolBuilders["Reset XForm"] = ResetTransformTool.CreateGUI;
             toolBuilders["Remove not visible vertex"] = VertexOptimizationTool.CreateGUI;

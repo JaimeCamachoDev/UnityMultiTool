@@ -1,8 +1,10 @@
 using System.Collections.Generic;
 using System.IO;
 using UnityEditor;
+using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.UIElements;
 
 namespace JaimeCamachoDev.Multitool.Modeling
 {
@@ -25,142 +27,221 @@ namespace JaimeCamachoDev.Multitool.Modeling
         private static bool showAdvancedSettings;
         private static readonly List<string> reusableBuffer = new List<string>();
 
-        public static void DrawTool()
+        public static VisualElement CreateGUI()
         {
-            GUILayout.Label("Advanced Mesh Combiner", EditorStyles.boldLabel);
-            EditorGUILayout.HelpBox("Combina múltiples objetos estáticos o skinned en un único mesh listo para VR o videojuegos.", MessageType.Info);
+            var root = new VisualElement();
+            root.Add(new Label("Advanced Mesh Combiner") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginBottom = 6 } });
+            root.Add(new HelpBox("Combina múltiples objetos estáticos o skinned en un único mesh listo para VR o videojuegos.", HelpBoxMessageType.Info));
 
-            if (Selection.gameObjects.Length == 0)
+            var contentContainer = new VisualElement { style = { marginTop = 6 } };
+            root.Add(contentContainer);
+
+            List<Renderer> currentRenderers = new List<Renderer>();
+            int currentVertexCount = 0;
+
+            void RefreshContent()
             {
-                EditorGUILayout.HelpBox("Selecciona al menos un objeto con MeshRenderer o SkinnedMeshRenderer.", MessageType.Warning);
-                return;
-            }
+                contentContainer.Clear();
 
-            includeChildren = EditorGUILayout.ToggleLeft("Incluir hijos de la selección", includeChildren);
-            includeInactive = EditorGUILayout.ToggleLeft("Incluir objetos inactivos", includeInactive);
-            includeSkinnedMeshes = EditorGUILayout.ToggleLeft("Convertir SkinnedMeshRenderers a mesh estático", includeSkinnedMeshes);
-            mergeByMaterial = EditorGUILayout.ToggleLeft("Agrupar por material (reduce draw calls)", mergeByMaterial);
-            alignToBoundsCenter = EditorGUILayout.ToggleLeft("Colocar el nuevo objeto en el centro del bound combinado", alignToBoundsCenter);
-
-            showAdvancedSettings = EditorGUILayout.Foldout(showAdvancedSettings, "Opciones avanzadas", true);
-            if (showAdvancedSettings)
-            {
-                EditorGUI.indentLevel++;
-                parentUnderActive = EditorGUILayout.ToggleLeft("Mantener el nuevo objeto bajo el padre del activo", parentUnderActive);
-                addMeshCollider = EditorGUILayout.ToggleLeft("Añadir MeshCollider al resultado", addMeshCollider);
-                copyLightmapSettings = EditorGUILayout.ToggleLeft("Copiar configuración de lightmap del primer renderer", copyLightmapSettings);
-                disableOriginalRenderers = EditorGUILayout.ToggleLeft("Desactivar renderers originales tras combinar", disableOriginalRenderers);
-                EditorGUI.indentLevel--;
-            }
-
-            GUILayout.Space(6f);
-
-            saveMeshAsset = EditorGUILayout.ToggleLeft("Guardar mesh combinado como asset", saveMeshAsset);
-            EditorGUI.indentLevel++;
-            using (new EditorGUI.DisabledScope(!saveMeshAsset))
-            {
-                outputMeshName = EditorGUILayout.TextField("Nombre del mesh", outputMeshName);
-                DefaultAsset newFolder = (DefaultAsset)EditorGUILayout.ObjectField("Carpeta destino", outputFolder, typeof(DefaultAsset), false);
-                if (newFolder != outputFolder && newFolder != null)
+                if (Selection.gameObjects.Length == 0)
                 {
-                    string path = AssetDatabase.GetAssetPath(newFolder);
-                    if (AssetDatabase.IsValidFolder(path))
+                    contentContainer.Add(new HelpBox("Selecciona al menos un objeto con MeshRenderer o SkinnedMeshRenderer.", HelpBoxMessageType.Warning));
+                    return;
+                }
+
+                var diagnosticsContainer = new VisualElement { style = { marginTop = 6 } };
+                Button combineButton = null;
+
+                void RefreshDiagnostics()
+                {
+                    diagnosticsContainer.Clear();
+
+                    SelectionDiagnostics diagnostics = GatherSelectionDiagnostics();
+                    currentRenderers = diagnostics.renderers;
+                    currentVertexCount = diagnostics.totalVertices;
+                    int meshCount = currentRenderers.Count;
+
+                    var renderersRow = new VisualElement { style = { flexDirection = FlexDirection.Row, justifyContent = Justify.SpaceBetween } };
+                    renderersRow.Add(new Label("Renderers a combinar"));
+                    renderersRow.Add(new Label(meshCount.ToString()));
+                    diagnosticsContainer.Add(renderersRow);
+
+                    var vertexRow = new VisualElement { style = { flexDirection = FlexDirection.Row, justifyContent = Justify.SpaceBetween } };
+                    vertexRow.Add(new Label("Vértices estimados"));
+                    vertexRow.Add(new Label(currentVertexCount.ToString()));
+                    diagnosticsContainer.Add(vertexRow);
+
+                    if (currentVertexCount > 500000)
                     {
-                        outputFolder = newFolder;
+                        diagnosticsContainer.Add(new HelpBox("La combinación supera los 500K vértices. Considera separar por materiales o dividir en bloques para evitar problemas de rendimiento.", HelpBoxMessageType.Warning));
                     }
-                }
-                if (outputFolder == null && saveMeshAsset)
-                {
-                    EditorGUILayout.HelpBox("Si no se asigna carpeta se utilizará 'Assets/'.", MessageType.Info);
-                }
-            }
-            EditorGUI.indentLevel--;
 
-            GUILayout.Space(6f);
+                    if (diagnostics.skinnedRendererCount > 0 && !includeSkinnedMeshes)
+                    {
+                        diagnosticsContainer.Add(new HelpBox("Hay SkinnedMeshRenderers seleccionados pero están deshabilitados en la combinación.", HelpBoxMessageType.Info));
+                    }
 
-            SelectionDiagnostics diagnostics = GatherSelectionDiagnostics();
-            List<Renderer> gatheredRenderers = diagnostics.renderers;
-            int meshCount = gatheredRenderers.Count;
-            int vertexCount = diagnostics.totalVertices;
-            EditorGUILayout.LabelField("Renderers a combinar", meshCount.ToString());
-            EditorGUILayout.LabelField("Vértices estimados", vertexCount.ToString());
+                    foreach (string warning in diagnostics.warnings)
+                    {
+                        diagnosticsContainer.Add(new HelpBox(warning, HelpBoxMessageType.Warning));
+                    }
 
-            if (vertexCount > 500000)
-            {
-                EditorGUILayout.HelpBox("La combinación supera los 500K vértices. Considera separar por materiales o dividir en bloques para evitar problemas de rendimiento.", MessageType.Warning);
-            }
+                    foreach (string note in diagnostics.notes)
+                    {
+                        diagnosticsContainer.Add(new HelpBox(note, HelpBoxMessageType.None));
+                    }
 
-            if (diagnostics.skinnedRendererCount > 0 && !includeSkinnedMeshes)
-            {
-                EditorGUILayout.HelpBox("Hay SkinnedMeshRenderers seleccionados pero están deshabilitados en la combinación.", MessageType.Info);
-            }
+                    var insightsFoldout = new Foldout { text = "Detalle de selección", value = showSelectionInsights, style = { marginTop = 6 } };
+                    insightsFoldout.RegisterValueChangedCallback(evt => showSelectionInsights = evt.newValue);
 
-            foreach (string warning in diagnostics.warnings)
-            {
-                EditorGUILayout.HelpBox(warning, MessageType.Warning);
-            }
-
-            foreach (string note in diagnostics.notes)
-            {
-                EditorGUILayout.HelpBox(note, MessageType.None);
-            }
-
-            showSelectionInsights = EditorGUILayout.Foldout(showSelectionInsights, "Detalle de selección", true);
-            if (showSelectionInsights)
-            {
-                using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
-                {
-                    EditorGUILayout.LabelField("MeshRenderers", diagnostics.meshRendererCount.ToString());
-                    EditorGUILayout.LabelField("SkinnedMeshRenderers", diagnostics.skinnedRendererCount.ToString());
+                    insightsFoldout.Add(new Label($"MeshRenderers: {diagnostics.meshRendererCount}"));
+                    insightsFoldout.Add(new Label($"SkinnedMeshRenderers: {diagnostics.skinnedRendererCount}"));
                     if (diagnostics.estimatedSubmeshCount > 0)
                     {
-                        EditorGUILayout.LabelField("Submeshes detectados", diagnostics.estimatedSubmeshCount.ToString());
+                        insightsFoldout.Add(new Label($"Submeshes detectados: {diagnostics.estimatedSubmeshCount}"));
                     }
 
                     if (diagnostics.sampleNames.Count > 0)
                     {
-                        EditorGUILayout.LabelField("Primeros objetos:");
-                        EditorGUI.indentLevel++;
-                        for (int i = 0; i < diagnostics.sampleNames.Count; i++)
+                        insightsFoldout.Add(new Label("Primeros objetos:") { style = { marginTop = 4 } });
+                        foreach (string sampleName in diagnostics.sampleNames)
                         {
-                            EditorGUILayout.LabelField("• " + diagnostics.sampleNames[i]);
+                            insightsFoldout.Add(new Label("• " + sampleName) { style = { marginLeft = 10 } });
                         }
                         if (diagnostics.moreSamples)
                         {
-                            EditorGUILayout.LabelField("…" + (meshCount - diagnostics.sampleNames.Count) + " objetos adicionales");
+                            insightsFoldout.Add(new Label("…" + (meshCount - diagnostics.sampleNames.Count) + " objetos adicionales") { style = { marginLeft = 10 } });
                         }
-                        EditorGUI.indentLevel--;
                     }
 
                     if (diagnostics.skipped.Count > 0)
                     {
-                        EditorGUILayout.Space(2f);
-                        EditorGUILayout.LabelField("Omitidos:");
-                        EditorGUI.indentLevel++;
+                        insightsFoldout.Add(new Label("Omitidos:") { style = { marginTop = 4 } });
                         foreach (string skipped in diagnostics.skipped)
                         {
-                            EditorGUILayout.LabelField("• " + skipped, EditorStyles.miniLabel);
+                            insightsFoldout.Add(new Label("• " + skipped) { style = { marginLeft = 10, fontSize = 10 } });
                         }
-                        EditorGUI.indentLevel--;
+                    }
+
+                    diagnosticsContainer.Add(insightsFoldout);
+
+                    if (meshCount == 0)
+                    {
+                        diagnosticsContainer.Add(new HelpBox("No se encontraron renderers válidos en la selección.", HelpBoxMessageType.Warning));
+                        combineButton.style.display = DisplayStyle.None;
+                    }
+                    else
+                    {
+                        combineButton.style.display = DisplayStyle.Flex;
+                        combineButton.SetEnabled(currentVertexCount != 0);
                     }
                 }
-            }
 
-            if (meshCount == 0)
-            {
-                EditorGUILayout.HelpBox("No se encontraron renderers válidos en la selección.", MessageType.Warning);
-                return;
-            }
+                var includeChildrenToggle = new Toggle("Incluir hijos de la selección") { value = includeChildren };
+                var includeInactiveToggle = new Toggle("Incluir objetos inactivos") { value = includeInactive };
+                var includeSkinnedToggle = new Toggle("Convertir SkinnedMeshRenderers a mesh estático") { value = includeSkinnedMeshes };
+                var mergeByMaterialToggle = new Toggle("Agrupar por material (reduce draw calls)") { value = mergeByMaterial };
+                var alignToBoundsToggle = new Toggle("Colocar el nuevo objeto en el centro del bound combinado") { value = alignToBoundsCenter };
 
-            GUILayout.Space(10f);
+                includeChildrenToggle.RegisterValueChangedCallback(evt => { includeChildren = evt.newValue; RefreshDiagnostics(); });
+                includeInactiveToggle.RegisterValueChangedCallback(evt => { includeInactive = evt.newValue; RefreshDiagnostics(); });
+                includeSkinnedToggle.RegisterValueChangedCallback(evt => { includeSkinnedMeshes = evt.newValue; RefreshDiagnostics(); });
+                mergeByMaterialToggle.RegisterValueChangedCallback(evt => { mergeByMaterial = evt.newValue; RefreshDiagnostics(); });
+                alignToBoundsToggle.RegisterValueChangedCallback(evt => { alignToBoundsCenter = evt.newValue; RefreshDiagnostics(); });
 
-            using (new EditorGUI.DisabledScope(vertexCount == 0))
-            {
-                if (GUILayout.Button("Combinar selección"))
+                contentContainer.Add(includeChildrenToggle);
+                contentContainer.Add(includeInactiveToggle);
+                contentContainer.Add(includeSkinnedToggle);
+                contentContainer.Add(mergeByMaterialToggle);
+                contentContainer.Add(alignToBoundsToggle);
+
+                var advancedFoldout = new Foldout { text = "Opciones avanzadas", value = showAdvancedSettings, style = { marginTop = 6 } };
+                advancedFoldout.RegisterValueChangedCallback(evt => showAdvancedSettings = evt.newValue);
+
+                var parentUnderActiveToggle = new Toggle("Mantener el nuevo objeto bajo el padre del activo") { value = parentUnderActive };
+                parentUnderActiveToggle.RegisterValueChangedCallback(evt => { parentUnderActive = evt.newValue; RefreshDiagnostics(); });
+                advancedFoldout.Add(parentUnderActiveToggle);
+
+                var addMeshColliderToggle = new Toggle("Añadir MeshCollider al resultado") { value = addMeshCollider };
+                addMeshColliderToggle.RegisterValueChangedCallback(evt => { addMeshCollider = evt.newValue; RefreshDiagnostics(); });
+                advancedFoldout.Add(addMeshColliderToggle);
+
+                var copyLightmapToggle = new Toggle("Copiar configuración de lightmap del primer renderer") { value = copyLightmapSettings };
+                copyLightmapToggle.RegisterValueChangedCallback(evt => copyLightmapSettings = evt.newValue);
+                advancedFoldout.Add(copyLightmapToggle);
+
+                var disableOriginalToggle = new Toggle("Desactivar renderers originales tras combinar") { value = disableOriginalRenderers };
+                disableOriginalToggle.RegisterValueChangedCallback(evt => { disableOriginalRenderers = evt.newValue; RefreshDiagnostics(); });
+                advancedFoldout.Add(disableOriginalToggle);
+
+                contentContainer.Add(advancedFoldout);
+
+                var saveMeshToggle = new Toggle("Guardar mesh combinado como asset") { value = saveMeshAsset, style = { marginTop = 6 } };
+                var meshNameField = new TextField("Nombre del mesh") { value = outputMeshName, style = { marginLeft = 15 } };
+                var folderField = new ObjectField("Carpeta destino") { objectType = typeof(DefaultAsset), allowSceneObjects = false, value = outputFolder, style = { marginLeft = 15 } };
+                var folderHelpBox = new HelpBox("Si no se asigna carpeta se utilizará 'Assets/'.", HelpBoxMessageType.Info) { style = { marginLeft = 15 } };
+
+                void RefreshFolderHelpBox()
                 {
-                    CombineSelection(gatheredRenderers, vertexCount);
+                    folderHelpBox.style.display = outputFolder == null && saveMeshAsset ? DisplayStyle.Flex : DisplayStyle.None;
                 }
+
+                meshNameField.SetEnabled(saveMeshAsset);
+                folderField.SetEnabled(saveMeshAsset);
+                RefreshFolderHelpBox();
+
+                saveMeshToggle.RegisterValueChangedCallback(evt =>
+                {
+                    saveMeshAsset = evt.newValue;
+                    meshNameField.SetEnabled(saveMeshAsset);
+                    folderField.SetEnabled(saveMeshAsset);
+                    RefreshFolderHelpBox();
+                    RefreshDiagnostics();
+                });
+                meshNameField.RegisterValueChangedCallback(evt => outputMeshName = evt.newValue);
+                folderField.RegisterValueChangedCallback(evt =>
+                {
+                    DefaultAsset newFolder = evt.newValue as DefaultAsset;
+                    if (newFolder != null)
+                    {
+                        string path = AssetDatabase.GetAssetPath(newFolder);
+                        if (AssetDatabase.IsValidFolder(path))
+                        {
+                            outputFolder = newFolder;
+                        }
+                    }
+                    else
+                    {
+                        outputFolder = null;
+                    }
+                    folderField.SetValueWithoutNotify(outputFolder);
+                    RefreshFolderHelpBox();
+                    RefreshDiagnostics();
+                });
+
+                contentContainer.Add(saveMeshToggle);
+                contentContainer.Add(meshNameField);
+                contentContainer.Add(folderField);
+                contentContainer.Add(folderHelpBox);
+
+                contentContainer.Add(diagnosticsContainer);
+
+                combineButton = new Button(() => CombineSelection(currentRenderers, currentVertexCount))
+                {
+                    text = "Combinar selección",
+                    style = { marginTop = 10 }
+                };
+                contentContainer.Add(combineButton);
+
+                RefreshDiagnostics();
             }
+
+            root.RegisterCallback<AttachToPanelEvent>(_ => Selection.selectionChanged += RefreshContent);
+            root.RegisterCallback<DetachFromPanelEvent>(_ => Selection.selectionChanged -= RefreshContent);
+
+            RefreshContent();
+
+            return root;
         }
 
         private static SelectionDiagnostics GatherSelectionDiagnostics()
