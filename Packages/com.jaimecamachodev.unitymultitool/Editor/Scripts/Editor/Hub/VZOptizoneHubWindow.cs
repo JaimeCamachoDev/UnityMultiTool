@@ -3,14 +3,13 @@ using UnityEditor;
 using System.Collections.Generic;
 using Optizone;
 using VZ_Optizone;
-using JaimeCamachoDev.Multitool.Modeling;
 
 namespace VZOptizone
 {
     public class VZOptizoneWindow : EditorWindow
     {
         private int currentSection = 0;
-        private string[] sections = { "INFO", "MODELING", "ANIMATION", "IMAGE", "SCENE" };
+        private string[] sections = { "INFO", "ANIMATION", "IMAGE", "SCENE" };
         private Dictionary<string, List<string>> toolCategories = new Dictionary<string, List<string>>();
         private Vector2 scrollPosition;
         private bool toolActive = false;
@@ -31,16 +30,6 @@ namespace VZOptizone
                 "Merge textures into one",
                 "Extract frames from video",
                 "Convert sprites to animation clip"});
-            toolCategories.Add("MODELING", new List<string> { "Merge mesh and create atlas",
-                "Remove not visible vertex",
-                "Hollow shell",
-                "Multi material Finder",
-                "Multi material splitter",
-                "Generate mesh uv lightmaps",
-                "Move UV inside grid",
-                "Vertex ID Display",
-                "Recalculate Mesh Bounds",
-                "Micro triangle detector"});
             toolCategories.Add("ANIMATION", new List<string> { "Remove blendshapes",
                 "Animation terminator",
                 "Bake pose",
@@ -77,9 +66,6 @@ namespace VZOptizone
                             break;
                         case "ANIMATION":
                             DrawAnimationToolsMenu();
-                            break;
-                        case "MODELING":
-                            DrawMODELINGToolsMenu();
                             break;
                         case "SCENE":
                             DrawSceneToolsMenu();
@@ -168,23 +154,6 @@ namespace VZOptizone
                 }
             }
         }
-        private void DrawMODELINGToolsMenu()
-        {
-            GUILayout.Label("Tools for MODELING", EditorStyles.boldLabel);
-
-            if (toolCategories.ContainsKey("MODELING"))
-            {
-                foreach (var tool in toolCategories["MODELING"])
-                {
-                    GUILayout.Space(5);
-                    if (GUILayout.Button(tool))
-                    {
-                        OpenImageTool(tool);
-                    }
-                }
-            }
-        }
-
         private void DrawAnimationToolsMenu()
         {
             GUILayout.Label("Tools for ANIMATION", EditorStyles.boldLabel);
@@ -222,11 +191,6 @@ namespace VZOptizone
         {
             activeTool = toolName;
             toolActive = true;
-
-            if (toolName == "Recalculate Mesh Bounds")
-            {
-                RecalculateMeshBoundsTool.EnableSceneView();
-            }
         }
 
         private void DrawActiveTool()
@@ -235,10 +199,6 @@ namespace VZOptizone
             {
                 toolActive = false;
                 activeTool = "";
-
-                // Deshabilita los Handles de la herramienta cuando se cierra
-                RecalculateMeshBoundsTool.DisableSceneView();
-                MicroTrianglesDetectorTool.DisableSceneView();
             }
 
             switch (activeTool)
@@ -264,38 +224,14 @@ namespace VZOptizone
                 case "Animation terminator":
                     AnimationTerminatorTool.DrawTool();
                     break;
-                case "Merge mesh and create atlas":
-                    MeshAtlasBakerTool.DrawTool();
-                    break;
                 case "Lightmap checker":
                     LightmapCheckerTool.DrawTool();
-                    break;
-                case "Remove not visible vertex":
-                    VertexOptimizationTool.DrawTool();
-                    break;
-                case "Hollow shell":
-                    HollowShellMeshTool.DrawTool();
-                    break;
-                case "Multi material Finder":
-                    MultiMaterialFinderTool.DrawTool();
                     break;
                 case "Renamer":
                     RenameTool.DrawTool();
                     break;
-                case "Multi material splitter":
-                    MultimaterialMeshSplitterTool.DrawTool();
-                    break;
-                case "Generate mesh uv lightmaps":
-                    UV2GeneratorTool.DrawTool();
-                    break;
-                case "Move UV inside grid":
-                    UVAdjusterTool.DrawTool();
-                    break;
                 case "Bake pose":
                     BakeMeshTool.DrawTool();
-                    break;
-                case "Vertex ID Display":
-                    VertexIDDisplayerTool.DrawTool();
                     break;
                 case "Combine animations/ors into one":
                     CombineAnimationsWithPathsTool.DrawTool();
@@ -303,28 +239,12 @@ namespace VZOptizone
                 case "Transfer bone weight":
                     BoneWeightTransferTool.DrawTool();
                     break;
-                case "Recalculate Mesh Bounds":
-                    if (Selection.activeGameObject != null)
-                    {
-                        MeshFilter meshFilter = Selection.activeGameObject.GetComponent<MeshFilter>();
-                        if (meshFilter != null)
-                        {
-                            RecalculateMeshBoundsTool.SetTarget(meshFilter);
-                        }
-                    }
-                    RecalculateMeshBoundsTool.DrawTool();
-                    break;
                 case "VAT Baker from Animation Clip":
                     AnimationClipTextureBakerTool.DrawTool();
                     break;
                 //case "VAT All in One":
                 //    VATAllInOneTool.DrawTool();
                 //    break;
-                case "Micro triangle detector":
-                    MicroTrianglesDetectorTool.EnableSceneView();
-                    MicroTrianglesDetectorTool.DrawTool();
-                    break;
-
 
                     // Añadir casos para otras herramientas
             }
