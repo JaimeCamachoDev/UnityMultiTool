@@ -869,23 +869,4 @@ namespace JaimeCamachoDev.Multitool.Animation
         }
     }
 
-    internal sealed class AlembicToVatWindow : EditorWindow
-    {
-        [MenuItem("Tools/JaimeCamachoDev/Multitool/Animation/Alembic to VAT")]
-        public static void ShowWindow()
-        {
-            AlembicToVatWindow window = GetWindow<AlembicToVatWindow>("Alembic to VAT");
-            window.minSize = new Vector2(420f, 520f);
-        }
-
-        private void OnDisable()
-        {
-            AlembicToVatTool.ResetState();
-        }
-
-        private void OnGUI()
-        {
-            AlembicToVatTool.DrawTool();
-        }
-    }
 }
