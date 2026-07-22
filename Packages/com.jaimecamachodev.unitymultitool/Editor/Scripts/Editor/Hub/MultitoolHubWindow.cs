@@ -180,13 +180,13 @@ namespace JaimeCamachoDev.Multitool
             toolDrawers["Lightmap checker"] = LightmapCheckerTool.DrawTool;
             toolDrawers["Renamer"] = RenameTool.DrawTool;
             toolDrawers["Hollow shell"] = HollowShellMeshTool.DrawTool;
-            toolDrawers["Multi material Finder"] = MultiMaterialFinderTool.DrawTool;
+            toolBuilders["Multi material Finder"] = MultiMaterialFinderTool.CreateGUI;
             toolDrawers["Multi material splitter"] = MultimaterialMeshSplitterTool.DrawTool;
             toolDrawers["Merge mesh and create atlas"] = MeshAtlasBakerTool.DrawTool;
             toolDrawers["Generate mesh uv lightmaps"] = UV2GeneratorTool.DrawTool;
             toolDrawers["Move UV inside grid"] = UVAdjusterTool.DrawTool;
-            toolDrawers["Vertex ID Display"] = VertexIDDisplayerTool.DrawTool;
-            toolDrawers["Micro triangle detector"] = MicroTrianglesDetectorTool.DrawTool;
+            toolBuilders["Vertex ID Display"] = VertexIDDisplayerTool.CreateGUI;
+            toolBuilders["Micro triangle detector"] = MicroTrianglesDetectorTool.CreateGUI;
             toolDrawers["Advanced mesh combiner"] = MeshCombinerTool.DrawTool;
             toolDrawers["Pivot mover & aligner"] = PivotAdjusterTool.DrawTool;
             toolDrawers["Reset XForm"] = ResetTransformTool.DrawTool;
