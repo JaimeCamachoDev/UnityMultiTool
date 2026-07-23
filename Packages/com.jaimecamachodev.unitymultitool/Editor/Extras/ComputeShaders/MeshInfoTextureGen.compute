@@ -1,4 +1,4 @@
-﻿// Each #kernel tells which function to compile; you can have many kernels
+// Each #kernel tells which function to compile; you can have many kernels
 #pragma kernel CSMain
 
 struct MeshInfo{
@@ -11,15 +11,25 @@ struct MeshInfo{
 // with cs.SetTexture
 RWTexture2D<float4> OutPosition;
 RWTexture2D<float4> OutNormal;
-RWTexture2D<float4> OutTangent;
 StructuredBuffer<MeshInfo> Info;
 int VertCount;
+int FrameCount;
 
+// Texture layout matches the common VAT convention: width = frame axis,
+// height = vertex axis (row per vertex). Info is populated frame-major
+// (frame*VertCount + vertex) by the baking pass, so id.x is the frame and
+// id.y is the vertex for both the buffer lookup and the output pixel.
 [numthreads(8,8,1)]
 void CSMain (uint3 id : SV_DispatchThreadID)
 {
-	int index = id.y * VertCount + id.x;
+	if ((int)id.x >= FrameCount || (int)id.y >= VertCount)
+	{
+		return;
+	}
+
+	int index = (int)id.x * VertCount + (int)id.y;
 	MeshInfo info = Info[index];
 
 	OutPosition[id.xy] = float4(info.position, 1.0);
+	OutNormal[id.xy] = float4(info.normal, 1.0);
 }
