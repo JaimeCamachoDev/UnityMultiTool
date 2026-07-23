@@ -3,11 +3,11 @@ using System.IO;
 using System.Linq;
 using JaimeCamachoDev.Multitool.UI;
 using UnityEditor;
-using UnityEditor.PackageManager;
 using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.UIElements;
 using MultitoolHub = JaimeCamachoDev.Multitool.MultitoolHubWindow;
+using PackageInfo = UnityEditor.PackageManager.PackageInfo;
 
 namespace JaimeCamachoDev.Multitool.Animation
 {
