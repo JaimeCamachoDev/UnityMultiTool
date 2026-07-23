@@ -33,21 +33,23 @@ namespace JaimeCamachoDev.Multitool.Modeling
                     return;
                 }
 
-                contentContainer.Add(new MTUIInfoLabel("Malla seleccionada: " + meshMultiMat.name));
+                var meshPanel = new MTUIPanel("Malla seleccionada");
+                meshPanel.Add(new MTUIInfoLabel(meshMultiMat.name));
 
                 if (meshMultiMat.blendShapeCount > 0)
                 {
-                    contentContainer.Add(new HelpBox("Esta malla tiene blend shapes. Los submeshes generados no los incluirán.", HelpBoxMessageType.Warning));
+                    meshPanel.Add(new HelpBox("Esta malla tiene blend shapes. Los submeshes generados no los incluirán.", HelpBoxMessageType.Warning));
                 }
+                contentContainer.Add(meshPanel);
 
                 bool hasMultipleSubmeshes = meshMultiMat.subMeshCount > 1;
                 if (!hasMultipleSubmeshes)
                 {
-                    contentContainer.Add(new HelpBox("La malla seleccionada no tiene varios submeshes; no hay nada que separar.", HelpBoxMessageType.Warning));
+                    meshPanel.Add(new HelpBox("La malla seleccionada no tiene varios submeshes; no hay nada que separar.", HelpBoxMessageType.Warning));
                     return;
                 }
 
-                contentContainer.Add(new Label("Carpeta de destino") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginTop = 6 } });
+                var destinationPanel = new MTUIPanel("Carpeta de destino") { style = { marginTop = 10 } };
                 var folderField = new ObjectField("Carpeta de Destino") { objectType = typeof(DefaultAsset), allowSceneObjects = false, value = destinationFolder };
                 var statusContainer = new VisualElement { style = { marginTop = 6 } };
                 var splitButton = new MTUIActionButton("Dividir y Guardar Submeshes", SplitAndSaveSubmeshes);
@@ -69,8 +71,9 @@ namespace JaimeCamachoDev.Multitool.Modeling
                     RefreshFolderStatus();
                 });
 
-                contentContainer.Add(folderField);
-                contentContainer.Add(statusContainer);
+                destinationPanel.Add(folderField);
+                destinationPanel.Add(statusContainer);
+                contentContainer.Add(destinationPanel);
                 contentContainer.Add(splitButton);
 
                 RefreshFolderStatus();

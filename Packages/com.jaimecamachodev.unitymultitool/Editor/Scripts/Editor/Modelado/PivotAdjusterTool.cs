@@ -113,6 +113,8 @@ namespace JaimeCamachoDev.Multitool.Modeling
                     }
                 }
 
+                var pivotPanel = new MTUIPanel("Pivote");
+
                 var pivotAnchorField = new EnumField("Preset de pivote", pivotAnchor);
                 pivotAnchorField.RegisterValueChangedCallback(evt =>
                 {
@@ -127,17 +129,21 @@ namespace JaimeCamachoDev.Multitool.Modeling
                         RefreshCustomPivotSection();
                     }
                 });
-                contentContainer.Add(pivotAnchorField);
+                pivotPanel.Add(pivotAnchorField);
 
                 var includeChildrenBoundsToggle = new Toggle("Calcular bounds incluyendo hijos") { value = includeChildrenBounds };
                 includeChildrenBoundsToggle.RegisterValueChangedCallback(evt => includeChildrenBounds = evt.newValue);
-                contentContainer.Add(includeChildrenBoundsToggle);
+                pivotPanel.Add(includeChildrenBoundsToggle);
 
                 var applyPerObjectToggle = new Toggle("Calcular preset por objeto") { value = applyPerObject };
                 applyPerObjectToggle.RegisterValueChangedCallback(evt => applyPerObject = evt.newValue);
-                contentContainer.Add(applyPerObjectToggle);
+                pivotPanel.Add(applyPerObjectToggle);
 
-                var advancedFoldout = new Foldout { text = "Ajustes avanzados", value = showAdvancedOptions, style = { marginTop = 6 } };
+                RefreshCustomPivotSection();
+                pivotPanel.Add(customPivotContainer);
+                contentContainer.Add(pivotPanel);
+
+                var advancedFoldout = new Foldout { text = "Ajustes avanzados", value = showAdvancedOptions, style = { marginTop = 10 } };
                 advancedFoldout.RegisterValueChangedCallback(evt => showAdvancedOptions = evt.newValue);
 
                 var preserveChildrenToggle = new Toggle("Mantener posición global de los hijos") { value = preserveChildren };
@@ -184,9 +190,6 @@ namespace JaimeCamachoDev.Multitool.Modeling
 
                 contentContainer.Add(advancedFoldout);
 
-                RefreshCustomPivotSection();
-                contentContainer.Add(customPivotContainer);
-
                 var referenceHelpBoxContainer = new VisualElement();
                 void RefreshReferenceHelpBox()
                 {
@@ -197,7 +200,7 @@ namespace JaimeCamachoDev.Multitool.Modeling
                     }
                 }
 
-                var referenceFoldout = new Foldout { text = "Referencia externa", value = showReferenceOptions, style = { marginTop = 6 } };
+                var referenceFoldout = new Foldout { text = "Referencia externa", value = showReferenceOptions, style = { marginTop = 10 } };
                 referenceFoldout.RegisterValueChangedCallback(evt => showReferenceOptions = evt.newValue);
 
                 var useReferenceToggle = new Toggle("Usar objeto como referencia") { value = useReferenceObject };

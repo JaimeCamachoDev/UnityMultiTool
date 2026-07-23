@@ -36,8 +36,17 @@ namespace JaimeCamachoDev.Multitool.Modeling
                     return;
                 }
 
+                var selectionPanel = new MTUIPanel("Objetos seleccionados");
+                foreach (GameObject go in Selection.gameObjects)
+                {
+                    selectionPanel.Add(new MTUIInfoLabel("• " + go.name));
+                }
+                contentContainer.Add(selectionPanel);
+
+                var optionsPanel = new MTUIPanel("Opciones") { style = { marginTop = 10 } };
+
                 var duplicateToggle = new Toggle("Duplicar el Mesh antes de aplicar") { value = duplicateMeshBeforeApplying };
-                contentContainer.Add(duplicateToggle);
+                optionsPanel.Add(duplicateToggle);
 
                 var saveToggle = new Toggle("Guardar mesh duplicado como asset") { value = saveDuplicatedMeshAsAsset, style = { marginLeft = 15 } };
                 var folderField = new ObjectField("Carpeta destino") { objectType = typeof(DefaultAsset), allowSceneObjects = false, value = meshAssetFolder, style = { marginLeft = 30 } };
@@ -65,16 +74,17 @@ namespace JaimeCamachoDev.Multitool.Modeling
 
                 folderField.RegisterValueChangedCallback(evt => meshAssetFolder = evt.newValue as DefaultAsset);
 
-                contentContainer.Add(saveToggle);
-                contentContainer.Add(folderField);
-                contentContainer.Add(sharedWarning);
+                optionsPanel.Add(saveToggle);
+                optionsPanel.Add(folderField);
+                optionsPanel.Add(sharedWarning);
 
                 var preserveToggle = new Toggle("Mantener la transformación global de los hijos") { value = preserveChildrenWorldTransform, style = { marginTop = 6 } };
                 preserveToggle.RegisterValueChangedCallback(evt => preserveChildrenWorldTransform = evt.newValue);
-                contentContainer.Add(preserveToggle);
+                optionsPanel.Add(preserveToggle);
+                contentContainer.Add(optionsPanel);
 
                 var applyButton = new MTUIActionButton("Aplicar Reset XForm a la selección", ApplyResetToSelection);
-                applyButton.style.marginTop = 8;
+                applyButton.style.marginTop = 10;
                 contentContainer.Add(applyButton);
             }
 

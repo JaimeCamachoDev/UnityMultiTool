@@ -30,15 +30,17 @@ namespace JaimeCamachoDev.Multitool.Modeling
                     return;
                 }
 
-                contentContainer.Add(new MTUIInfoLabel("Malla seleccionada: " + selectedMesh.name));
+                var meshPanel = new MTUIPanel("Malla seleccionada");
+                meshPanel.Add(new MTUIInfoLabel(selectedMesh.name));
 
                 if (AssetImporter.GetAtPath(AssetDatabase.GetAssetPath(selectedMesh)) is ModelImporter)
                 {
-                    contentContainer.Add(new HelpBox("Esta malla proviene de un modelo importado (FBX/OBJ/etc). Los cambios se perderán al reimportar el modelo; considera duplicar la malla como un asset independiente antes de generar el UV2.", HelpBoxMessageType.Warning));
+                    meshPanel.Add(new HelpBox("Esta malla proviene de un modelo importado (FBX/OBJ/etc). Los cambios se perderán al reimportar el modelo; considera duplicar la malla como un asset independiente antes de generar el UV2.", HelpBoxMessageType.Warning));
                 }
+                contentContainer.Add(meshPanel);
 
                 var generateButton = new MTUIActionButton("Generar UV2", GenerateUV2);
-                generateButton.style.marginTop = 6;
+                generateButton.style.marginTop = 10;
                 contentContainer.Add(generateButton);
             }
 

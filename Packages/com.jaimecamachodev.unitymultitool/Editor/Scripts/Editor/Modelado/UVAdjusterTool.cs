@@ -81,23 +81,26 @@ namespace JaimeCamachoDev.Multitool.Modeling
                     undoButton.SetAvailable(hasBackup);
                 }
 
+                var gridPanel = new MTUIPanel("Cuadrícula UV") { style = { marginTop = 10 } };
+
                 // Input para las filas y columnas
                 var rowsField = new IntegerField("Rows") { value = rows };
                 rowsField.RegisterValueChangedCallback(evt => { rows = evt.newValue; RefreshStatus(); });
-                contentContainer.Add(rowsField);
+                gridPanel.Add(rowsField);
 
                 var columnsField = new IntegerField("Columns") { value = columns };
                 columnsField.RegisterValueChangedCallback(evt => { columns = evt.newValue; RefreshStatus(); });
-                contentContainer.Add(columnsField);
+                gridPanel.Add(columnsField);
 
                 // Input para la posición en la cuadrícula
                 var gridXField = new IntegerField("Grid X") { value = gridX };
                 gridXField.RegisterValueChangedCallback(evt => gridX = evt.newValue);
-                contentContainer.Add(gridXField);
+                gridPanel.Add(gridXField);
 
                 var gridYField = new IntegerField("Grid Y") { value = gridY };
                 gridYField.RegisterValueChangedCallback(evt => gridY = evt.newValue);
-                contentContainer.Add(gridYField);
+                gridPanel.Add(gridYField);
+                contentContainer.Add(gridPanel);
 
                 contentContainer.Add(statusContainer);
 

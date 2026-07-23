@@ -43,37 +43,48 @@ namespace JaimeCamachoDev.Multitool.Modeling
                     return;
                 }
 
-                contentContainer.Add(new MTUIInfoLabel("Objeto seleccionado: " + sceneObject.name));
+                var selectionPanel = new MTUIPanel("Objeto seleccionado");
+                selectionPanel.Add(new MTUIInfoLabel(sceneObject.name));
+                contentContainer.Add(selectionPanel);
 
-                contentContainer.Add(new Label("Triangle Detection Settings") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginTop = 10 } });
+                var thresholdsPanel = new MTUIPanel("Umbrales de detección") { style = { marginTop = 10 } };
 
                 var minAreaField = new FloatField("Min Area Threshold") { value = minAreaThreshold };
                 minAreaField.RegisterValueChangedCallback(evt => minAreaThreshold = evt.newValue);
-                contentContainer.Add(minAreaField);
+                thresholdsPanel.Add(minAreaField);
 
                 var maxEdgeField = new FloatField("Max Edge Ratio Threshold") { value = maxEdgeRatioThreshold };
                 maxEdgeField.RegisterValueChangedCallback(evt => maxEdgeRatioThreshold = evt.newValue);
-                contentContainer.Add(maxEdgeField);
+                thresholdsPanel.Add(maxEdgeField);
 
-                contentContainer.Add(new Label("Set Thresholds Based on Distance") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginTop = 10 } });
+                thresholdsPanel.Add(new MTUIInfoLabel("Ajustar según distancia a cámara:") { style = { marginTop = 8, marginBottom = 4 } });
+
+                var distanceRow = new VisualElement { style = { flexDirection = FlexDirection.Row, flexWrap = Wrap.Wrap } };
 
                 void AddDistanceButton(string label, float distance)
                 {
-                    contentContainer.Add(new MTUIActionButton(label, () =>
+                    var button = new MTUIActionButton(label, () =>
                     {
                         SetThresholdsForDistance(distance);
                         minAreaField.SetValueWithoutNotify(minAreaThreshold);
                         maxEdgeField.SetValueWithoutNotify(maxEdgeRatioThreshold);
-                    }, MTUIColors.NeutralBackground, MTUIColors.NeutralBorder, MTUIColors.NeutralText));
+                    }, MTUIColors.NeutralBackground, MTUIColors.NeutralBorder, MTUIColors.NeutralText);
+                    button.style.marginRight = 4;
+                    distanceRow.Add(button);
                 }
 
-                AddDistanceButton("1 cm (Close)", 0.01f);
-                AddDistanceButton("10 cm (Near)", 0.1f);
-                AddDistanceButton("1 m (Mid-range)", 1f);
-                AddDistanceButton("10 m (Far)", 10f);
-                AddDistanceButton("100 m (Very Far)", 100f);
+                AddDistanceButton("1 cm", 0.01f);
+                AddDistanceButton("10 cm", 0.1f);
+                AddDistanceButton("1 m", 1f);
+                AddDistanceButton("10 m", 10f);
+                AddDistanceButton("100 m", 100f);
 
-                var resultsContainer = new VisualElement { style = { marginTop = 6 } };
+                thresholdsPanel.Add(distanceRow);
+                contentContainer.Add(thresholdsPanel);
+
+                var resultsPanel = new MTUIPanel("Resultados") { style = { marginTop = 10 } };
+                var resultsContainer = new VisualElement();
+                resultsPanel.Add(resultsContainer);
 
                 var analyzeButton = new MTUIActionButton("Analyze", () =>
                 {
@@ -83,7 +94,7 @@ namespace JaimeCamachoDev.Multitool.Modeling
                 analyzeButton.style.marginTop = 10;
                 contentContainer.Add(analyzeButton);
 
-                contentContainer.Add(resultsContainer);
+                contentContainer.Add(resultsPanel);
                 RefreshResults(resultsContainer);
             }
 

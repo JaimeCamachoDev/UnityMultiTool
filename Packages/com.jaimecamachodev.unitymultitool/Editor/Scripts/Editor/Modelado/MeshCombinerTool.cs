@@ -50,7 +50,9 @@ namespace JaimeCamachoDev.Multitool.Modeling
                     return;
                 }
 
-                var diagnosticsContainer = new VisualElement { style = { marginTop = 6 } };
+                var diagnosticsPanel = new MTUIPanel("Diagnóstico de la selección") { style = { marginTop = 10 } };
+                var diagnosticsContainer = new VisualElement();
+                diagnosticsPanel.Add(diagnosticsContainer);
                 MTUIActionButton combineButton = null;
 
                 void RefreshDiagnostics()
@@ -138,25 +140,28 @@ namespace JaimeCamachoDev.Multitool.Modeling
                     }
                 }
 
+                var sourcePanel = new MTUIPanel("Origen");
                 var includeChildrenToggle = new Toggle("Incluir hijos de la selección") { value = includeChildren };
                 var includeInactiveToggle = new Toggle("Incluir objetos inactivos") { value = includeInactive };
                 var includeSkinnedToggle = new Toggle("Convertir SkinnedMeshRenderers a mesh estático") { value = includeSkinnedMeshes };
-                var mergeByMaterialToggle = new Toggle("Agrupar por material (reduce draw calls)") { value = mergeByMaterial };
-                var alignToBoundsToggle = new Toggle("Colocar el nuevo objeto en el centro del bound combinado") { value = alignToBoundsCenter };
-
                 includeChildrenToggle.RegisterValueChangedCallback(evt => { includeChildren = evt.newValue; RefreshDiagnostics(); });
                 includeInactiveToggle.RegisterValueChangedCallback(evt => { includeInactive = evt.newValue; RefreshDiagnostics(); });
                 includeSkinnedToggle.RegisterValueChangedCallback(evt => { includeSkinnedMeshes = evt.newValue; RefreshDiagnostics(); });
+                sourcePanel.Add(includeChildrenToggle);
+                sourcePanel.Add(includeInactiveToggle);
+                sourcePanel.Add(includeSkinnedToggle);
+                contentContainer.Add(sourcePanel);
+
+                var resultPanel = new MTUIPanel("Resultado") { style = { marginTop = 10 } };
+                var mergeByMaterialToggle = new Toggle("Agrupar por material (reduce draw calls)") { value = mergeByMaterial };
+                var alignToBoundsToggle = new Toggle("Colocar el nuevo objeto en el centro del bound combinado") { value = alignToBoundsCenter };
                 mergeByMaterialToggle.RegisterValueChangedCallback(evt => { mergeByMaterial = evt.newValue; RefreshDiagnostics(); });
                 alignToBoundsToggle.RegisterValueChangedCallback(evt => { alignToBoundsCenter = evt.newValue; RefreshDiagnostics(); });
+                resultPanel.Add(mergeByMaterialToggle);
+                resultPanel.Add(alignToBoundsToggle);
+                contentContainer.Add(resultPanel);
 
-                contentContainer.Add(includeChildrenToggle);
-                contentContainer.Add(includeInactiveToggle);
-                contentContainer.Add(includeSkinnedToggle);
-                contentContainer.Add(mergeByMaterialToggle);
-                contentContainer.Add(alignToBoundsToggle);
-
-                var advancedFoldout = new Foldout { text = "Opciones avanzadas", value = showAdvancedSettings, style = { marginTop = 6 } };
+                var advancedFoldout = new Foldout { text = "Opciones avanzadas", value = showAdvancedSettings, style = { marginTop = 10 } };
                 advancedFoldout.RegisterValueChangedCallback(evt => showAdvancedSettings = evt.newValue);
 
                 var parentUnderActiveToggle = new Toggle("Mantener el nuevo objeto bajo el padre del activo") { value = parentUnderActive };
@@ -177,7 +182,8 @@ namespace JaimeCamachoDev.Multitool.Modeling
 
                 contentContainer.Add(advancedFoldout);
 
-                var saveMeshToggle = new Toggle("Guardar mesh combinado como asset") { value = saveMeshAsset, style = { marginTop = 6 } };
+                var savePanel = new MTUIPanel("Guardado") { style = { marginTop = 10 } };
+                var saveMeshToggle = new Toggle("Guardar mesh combinado como asset") { value = saveMeshAsset };
                 var meshNameField = new TextField("Nombre del mesh") { value = outputMeshName, style = { marginLeft = 15 } };
                 var folderField = new ObjectField("Carpeta destino") { objectType = typeof(DefaultAsset), allowSceneObjects = false, value = outputFolder, style = { marginLeft = 15 } };
                 var folderHelpBox = new HelpBox("Si no se asigna carpeta se utilizará 'Assets/'.", HelpBoxMessageType.Info) { style = { marginLeft = 15 } };
@@ -220,12 +226,13 @@ namespace JaimeCamachoDev.Multitool.Modeling
                     RefreshDiagnostics();
                 });
 
-                contentContainer.Add(saveMeshToggle);
-                contentContainer.Add(meshNameField);
-                contentContainer.Add(folderField);
-                contentContainer.Add(folderHelpBox);
+                savePanel.Add(saveMeshToggle);
+                savePanel.Add(meshNameField);
+                savePanel.Add(folderField);
+                savePanel.Add(folderHelpBox);
+                contentContainer.Add(savePanel);
 
-                contentContainer.Add(diagnosticsContainer);
+                contentContainer.Add(diagnosticsPanel);
 
                 combineButton = new MTUIActionButton("Combinar selección", () => CombineSelection(currentRenderers, currentVertexCount));
                 combineButton.style.marginTop = 10;
