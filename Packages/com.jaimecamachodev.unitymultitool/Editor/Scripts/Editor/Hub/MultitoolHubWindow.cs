@@ -48,6 +48,29 @@ namespace JaimeCamachoDev.Multitool
             window.InitializeData();
         }
 
+        // Permite que una herramienta abra directamente otra (p.ej. VAT Baker enlazando
+        // a VAT Combiner/VAT Painter) sin que el usuario tenga que navegar manualmente.
+        public static void OpenTool(string toolName)
+        {
+            MultitoolHubWindow window = GetWindow<MultitoolHubWindow>("Multitool");
+            window.minSize = new Vector2(780f, 500f);
+            window.InitializeData();
+
+            foreach (KeyValuePair<Category, List<string>> kvp in window.categoryTools)
+            {
+                if (kvp.Value.Contains(toolName))
+                {
+                    window.currentCategory = kvp.Key;
+                    break;
+                }
+            }
+
+            window.ActivateTool(toolName);
+            window.RefreshCategorySelection();
+            window.RefreshContent();
+            window.Focus();
+        }
+
         private void OnEnable()
         {
             InitializeData();
@@ -91,8 +114,9 @@ namespace JaimeCamachoDev.Multitool
                 "Combine animations/ors into one",
                 "Transfer bone weight",
                 "Alembic to VAT",
-                "VAT Baker from Animation Clip",
-                "VAT All in One"
+                "VAT Baker",
+                "VAT Combiner",
+                "VAT Painter"
             };
 
             categoryTools[Category.Texturas] = new List<string>
@@ -139,8 +163,9 @@ namespace JaimeCamachoDev.Multitool
             toolDescriptions["Combine animations/ors into one"] = "Fusiona varias animaciones en un solo clip optimizado.";
             toolDescriptions["Transfer bone weight"] = "Transfiere pesos de hueso entre mallas con distinta topologa.";
             toolDescriptions["Alembic to VAT"] = "Convierte una secuencia Alembic en texturas VAT listas para shader y prefab.";
-            toolDescriptions["VAT Baker from Animation Clip"] = "Genera texturas VAT a partir de un clip de animacin.";
-            toolDescriptions["VAT All in One"] = "Paquete completo de herramientas VAT (en desarrollo).";
+            toolDescriptions["VAT Baker"] = "Hornea texturas VAT desde un Animator y sustituye el objeto animado por su versión estática con el shader ya asignado.";
+            toolDescriptions["VAT Combiner"] = "Combina varias SkinnedMeshRenderer de un mismo personaje en una única malla lista para hornear VAT.";
+            toolDescriptions["VAT Painter"] = "Unifica los materiales de una malla combinada en un único atlas antes de hornear VAT.";
 
             toolDescriptions["Convert Asset to Image"] = "Convierte assets de texturas en imágenes y viceversa.";
             toolDescriptions["Split texture into channels"] = "Extrae canales RGBA independientes utilizando ffmpeg.";
@@ -175,7 +200,9 @@ namespace JaimeCamachoDev.Multitool
             toolDrawers["Combine animations/ors into one"] = CombineAnimationsWithPathsTool.DrawTool;
             toolDrawers["Transfer bone weight"] = BoneWeightTransferTool.DrawTool;
             toolDrawers["Alembic to VAT"] = AlembicToVatTool.DrawTool;
-            toolDrawers["VAT Baker from Animation Clip"] = AnimationClipTextureBakerTool.DrawTool;
+            toolBuilders["VAT Baker"] = AnimationClipTextureBakerTool.CreateGUI;
+            toolBuilders["VAT Combiner"] = VATCombinerTool.CreateGUI;
+            toolBuilders["VAT Painter"] = VATPainterTool.CreateGUI;
 
             toolDrawers["Lightmap checker"] = LightmapCheckerTool.DrawTool;
             toolDrawers["Renamer"] = RenameTool.DrawTool;

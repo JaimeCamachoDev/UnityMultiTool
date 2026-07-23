@@ -34,9 +34,7 @@ namespace VZOptizone
                 "Animation terminator",
                 "Bake pose",
                 "Combine animations/ors into one",
-                "Transfer bone weight",
-                "VAT Baker from Animation Clip",
-                "VAT All in One"});
+                "Transfer bone weight"});
             toolCategories.Add("SCENE", new List<string> { "Lightmap checker",
                 "Renamer"});
         }
@@ -239,12 +237,6 @@ namespace VZOptizone
                 case "Transfer bone weight":
                     BoneWeightTransferTool.DrawTool();
                     break;
-                case "VAT Baker from Animation Clip":
-                    AnimationClipTextureBakerTool.DrawTool();
-                    break;
-                //case "VAT All in One":
-                //    VATAllInOneTool.DrawTool();
-                //    break;
 
                     // Añadir casos para otras herramientas
             }
