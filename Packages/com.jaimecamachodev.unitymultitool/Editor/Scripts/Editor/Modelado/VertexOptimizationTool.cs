@@ -82,13 +82,13 @@ namespace JaimeCamachoDev.Multitool.Modeling
                 }
                 contentContainer.Add(selectionPanel);
 
-                contentContainer.Add(new Label("Oclusores adicionales (opcional)") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginTop = 6 } });
+                var occludersPanel = new MTUIPanel("Oclusores adicionales (opcional)") { style = { marginTop = 10 } };
                 var includeTargetsToggle = new Toggle("Usar los propios objetos a optimizar como oclusores entre sí") { value = includeTargetsAsOccluders };
                 includeTargetsToggle.RegisterValueChangedCallback(evt => includeTargetsAsOccluders = evt.newValue);
-                contentContainer.Add(includeTargetsToggle);
+                occludersPanel.Add(includeTargetsToggle);
 
                 var occluderListContainer = new VisualElement();
-                contentContainer.Add(occluderListContainer);
+                occludersPanel.Add(occluderListContainer);
 
                 void RefreshOccluderList()
                 {
@@ -119,20 +119,24 @@ namespace JaimeCamachoDev.Multitool.Modeling
                 }, MTUIColors.NeutralBackground, MTUIColors.NeutralBorder, MTUIColors.NeutralText);
                 removeOccluderButton.style.marginLeft = 6;
                 occluderButtonsRow.Add(removeOccluderButton);
-                contentContainer.Add(occluderButtonsRow);
+                occludersPanel.Add(occluderButtonsRow);
 
                 RefreshOccluderList();
+                contentContainer.Add(occludersPanel);
 
-                contentContainer.Add(new Label("Muestreo") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginTop = 10 } });
+                var samplingPanel = new MTUIPanel("Muestreo") { style = { marginTop = 10 } };
                 var qualityField = new EnumField("Calidad", sampleQuality);
                 qualityField.RegisterValueChangedCallback(evt => sampleQuality = (SampleQuality)evt.newValue);
-                contentContainer.Add(qualityField);
+                samplingPanel.Add(qualityField);
 
                 var highlightToggle = new Toggle("Resaltar caras ocultas en la Scene View") { value = showHiddenFacesInSceneView };
                 highlightToggle.RegisterValueChangedCallback(evt => showHiddenFacesInSceneView = evt.newValue);
-                contentContainer.Add(highlightToggle);
+                samplingPanel.Add(highlightToggle);
+                contentContainer.Add(samplingPanel);
 
-                var resultsContainer = new VisualElement { style = { marginTop = 10 } };
+                var resultsPanel = new MTUIPanel("Resultados") { style = { marginTop = 10 } };
+                var resultsContainer = new VisualElement();
+                resultsPanel.Add(resultsContainer);
 
                 var analyzeButton = new MTUIActionButton("Analizar visibilidad", () =>
                 {
@@ -142,7 +146,7 @@ namespace JaimeCamachoDev.Multitool.Modeling
                 analyzeButton.style.marginTop = 10;
                 contentContainer.Add(analyzeButton);
 
-                contentContainer.Add(resultsContainer);
+                contentContainer.Add(resultsPanel);
                 RefreshResults(resultsContainer);
             }
 

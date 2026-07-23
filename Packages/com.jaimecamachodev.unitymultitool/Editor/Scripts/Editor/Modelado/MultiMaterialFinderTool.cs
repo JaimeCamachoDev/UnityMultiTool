@@ -16,6 +16,7 @@ namespace JaimeCamachoDev.Multitool.Modeling
             var root = new VisualElement();
 
             root.Add(new Label("Multi-Material Finder") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginBottom = 6 } });
+            root.Add(new HelpBox("Busca objetos en la escena que usen varios materiales a la vez.", HelpBoxMessageType.Info));
 
             var resultsContainer = new VisualElement { style = { marginTop = 10 } };
 
@@ -24,6 +25,7 @@ namespace JaimeCamachoDev.Multitool.Modeling
                 FindObjectsWithMultipleMaterials();
                 RefreshResults(resultsContainer);
             });
+            findButton.style.marginTop = 10;
             root.Add(findButton);
 
             root.Add(resultsContainer);
@@ -42,7 +44,7 @@ namespace JaimeCamachoDev.Multitool.Modeling
                 return;
             }
 
-            container.Add(new Label("Objects with Multiple Materials:") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginBottom = 4 } });
+            var resultsPanel = new MTUIPanel($"Objetos con múltiples materiales ({objectsWithMultiMaterial.Count})");
 
             var scroll = new ScrollView { style = { maxHeight = 240 } };
             foreach (GameObject go in objectsWithMultiMaterial)
@@ -64,7 +66,8 @@ namespace JaimeCamachoDev.Multitool.Modeling
 
                 scroll.Add(row);
             }
-            container.Add(scroll);
+            resultsPanel.Add(scroll);
+            container.Add(resultsPanel);
         }
 
         // Método para encontrar los objetos con varios materiales

@@ -48,14 +48,15 @@ namespace JaimeCamachoDev.Multitool.Modeling
                 }
                 contentContainer.Add(selectionPanel);
 
-                contentContainer.Add(new Label("Plano de recorte") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginTop = 6 } });
-                var clippingPlaneField = new ObjectField("Clipping Plane") { objectType = typeof(Transform), allowSceneObjects = true, value = clippingPlane };
-                contentContainer.Add(clippingPlaneField);
+                var clipPanel = new MTUIPanel("Recorte") { style = { marginTop = 10 } };
 
-                contentContainer.Add(new Label("Dirección de recorte") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginTop = 10 } });
+                var clippingPlaneField = new ObjectField("Clipping Plane") { objectType = typeof(Transform), allowSceneObjects = true, value = clippingPlane };
+                clipPanel.Add(clippingPlaneField);
+
                 var clipDirectionField = new EnumField("Clip Direction", clipDirection);
                 clipDirectionField.RegisterValueChangedCallback(evt => clipDirection = (ClipDirection)evt.newValue);
-                contentContainer.Add(clipDirectionField);
+                clipPanel.Add(clipDirectionField);
+                contentContainer.Add(clipPanel);
 
                 var statusContainer = new VisualElement { style = { marginTop = 10 } };
                 contentContainer.Add(statusContainer);

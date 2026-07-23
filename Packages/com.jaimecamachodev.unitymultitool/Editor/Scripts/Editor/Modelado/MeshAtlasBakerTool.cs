@@ -155,21 +155,22 @@ namespace JaimeCamachoDev.Multitool.Modeling
                     return;
                 }
 
-                AddInfoRow(contentContainer, "MeshRenderers detectados", context.Renderers.Count.ToString());
-                AddInfoRow(contentContainer, "Submeshes combinados", context.SubMeshCount.ToString());
-                AddInfoRow(contentContainer, "Materiales totales", materials.Length.ToString());
-                AddInfoRow(contentContainer, "Materiales únicos", context.UniqueMaterialCount.ToString());
-                AddInfoRow(contentContainer, "Vértices estimados", context.VertexCount.ToString());
+                var selectionPanel = new MTUIPanel("Selección");
+                AddInfoRow(selectionPanel, "MeshRenderers detectados", context.Renderers.Count.ToString());
+                AddInfoRow(selectionPanel, "Submeshes combinados", context.SubMeshCount.ToString());
+                AddInfoRow(selectionPanel, "Materiales totales", materials.Length.ToString());
+                AddInfoRow(selectionPanel, "Materiales únicos", context.UniqueMaterialCount.ToString());
+                AddInfoRow(selectionPanel, "Vértices estimados", context.VertexCount.ToString());
 
                 if (!HasMultipleMaterials(materials) && context.SubMeshCount <= 1)
                 {
-                    contentContainer.Add(new HelpBox("La selección ya utiliza un único material.", HelpBoxMessageType.Info));
+                    selectionPanel.Add(new HelpBox("La selección ya utiliza un único material.", HelpBoxMessageType.Info));
                 }
 
                 if (context.RequiresTemporaryMesh)
                 {
                     string infoMessage = $"Se combinarán temporalmente {context.Renderers.Count} MeshRenderers y el resultado se aplicará al objeto activo '{context.TargetRenderer.name}'.";
-                    contentContainer.Add(new HelpBox(infoMessage, HelpBoxMessageType.Info));
+                    selectionPanel.Add(new HelpBox(infoMessage, HelpBoxMessageType.Info));
 
                     var includedBox = CreateBorderedBox();
                     includedBox.Add(new Label("Objetos incluidos:"));
@@ -182,7 +183,7 @@ namespace JaimeCamachoDev.Multitool.Modeling
                     {
                         includedBox.Add(new Label($"…{context.Renderers.Count - samples.Count} adicionales") { style = { marginLeft = 10, fontSize = 10 } });
                     }
-                    contentContainer.Add(includedBox);
+                    selectionPanel.Add(includedBox);
                 }
 
                 if (context.Skipped.Count > 0)
@@ -193,10 +194,12 @@ namespace JaimeCamachoDev.Multitool.Modeling
                     {
                         skippedBox.Add(new Label("• " + skipped) { style = { marginLeft = 10, fontSize = 10 } });
                     }
-                    contentContainer.Add(skippedBox);
+                    selectionPanel.Add(skippedBox);
                 }
+                contentContainer.Add(selectionPanel);
 
-                var materialScrollView = new ScrollView { style = { height = 120, marginTop = 4 } };
+                var materialsPanel = new MTUIPanel("Materiales detectados") { style = { marginTop = 10 } };
+                var materialScrollView = new ScrollView { style = { height = 120 } };
                 for (int i = 0; i < materials.Length; i++)
                 {
                     Material material = materials[i];
@@ -217,9 +220,13 @@ namespace JaimeCamachoDev.Multitool.Modeling
 
                     materialScrollView.Add(new Label($"• Submesh {i + 1}: {matName} ({textureInfo})") { style = { fontSize = 10 } });
                 }
-                contentContainer.Add(materialScrollView);
+                materialsPanel.Add(materialScrollView);
+                contentContainer.Add(materialsPanel);
 
-                var atlasSizeRow = new VisualElement { style = { flexDirection = FlexDirection.Row, marginTop = 8 } };
+                var atlasSettingsPanel = new MTUIPanel("Configuración del atlas") { style = { marginTop = 10 } };
+                atlasSettingsPanel.Add(new MTUIInfoLabel("Tamaño del atlas") { style = { marginBottom = 2 } });
+
+                var atlasSizeRow = new VisualElement { style = { flexDirection = FlexDirection.Row } };
                 var atlasSizeButtons = new List<MTUIActionButton>();
 
                 void RefreshAtlasSizeButtons()
@@ -247,11 +254,12 @@ namespace JaimeCamachoDev.Multitool.Modeling
                     atlasSizeRow.Add(sizeButton);
                 }
                 RefreshAtlasSizeButtons();
-                contentContainer.Add(atlasSizeRow);
+                atlasSettingsPanel.Add(atlasSizeRow);
 
-                var paddingSlider = new SliderInt("Padding", 0, 64) { value = atlasPadding };
+                var paddingSlider = new SliderInt("Padding", 0, 64) { value = atlasPadding, style = { marginTop = 6 } };
                 paddingSlider.RegisterValueChangedCallback(evt => atlasPadding = evt.newValue);
-                contentContainer.Add(paddingSlider);
+                atlasSettingsPanel.Add(paddingSlider);
+                contentContainer.Add(atlasSettingsPanel);
 
                 MTUIActionButton generateButton = null;
                 HelpBox memoryWarning = null;
@@ -267,7 +275,9 @@ namespace JaimeCamachoDev.Multitool.Modeling
                     memoryWarning.style.display = !saveAtlasTexture ? DisplayStyle.Flex : DisplayStyle.None;
                 }
 
-                var saveAtlasToggle = new Toggle("Guardar atlas como PNG") { value = saveAtlasTexture, style = { marginTop = 6 } };
+                var savePanel = new MTUIPanel("Guardado") { style = { marginTop = 10 } };
+
+                var saveAtlasToggle = new Toggle("Guardar atlas como PNG") { value = saveAtlasTexture };
                 var saveMaterialToggle = new Toggle("Guardar material como asset") { value = saveMaterialAsset };
                 saveMaterialToggle.SetEnabled(saveAtlasTexture);
 
@@ -306,13 +316,13 @@ namespace JaimeCamachoDev.Multitool.Modeling
                     RefreshFolderState();
                 });
 
-                contentContainer.Add(saveAtlasToggle);
-                contentContainer.Add(saveMaterialToggle);
-                contentContainer.Add(saveMeshToggle);
+                savePanel.Add(saveAtlasToggle);
+                savePanel.Add(saveMaterialToggle);
+                savePanel.Add(saveMeshToggle);
 
                 var nameField = new TextField("Nombre base") { value = outputName, style = { marginLeft = 15, marginTop = 4 } };
                 nameField.RegisterValueChangedCallback(evt => outputName = evt.newValue);
-                contentContainer.Add(nameField);
+                savePanel.Add(nameField);
 
                 folderField.RegisterValueChangedCallback(evt =>
                 {
@@ -320,14 +330,15 @@ namespace JaimeCamachoDev.Multitool.Modeling
                     RefreshFolderState();
                 });
                 RefreshFolderState();
-                contentContainer.Add(folderField);
-                contentContainer.Add(folderHelpBox);
-
-                contentContainer.Add(BuildCustomAtlasWorkflowSection(context));
+                savePanel.Add(folderField);
+                savePanel.Add(folderHelpBox);
 
                 memoryWarning = new HelpBox("El atlas y el material permanecerán en memoria hasta que guardes la escena o exportes manualmente.", HelpBoxMessageType.Info) { style = { marginTop = 6 } };
                 RefreshMemoryWarning();
-                contentContainer.Add(memoryWarning);
+                savePanel.Add(memoryWarning);
+                contentContainer.Add(savePanel);
+
+                contentContainer.Add(BuildCustomAtlasWorkflowSection(context));
 
                 var cannotGenerateHelpBox = new HelpBox("Se requieren al menos dos materiales o submeshes para generar el atlas.", HelpBoxMessageType.Info) { style = { marginTop = 6 } };
                 cannotGenerateHelpBox.style.display = (!HasMultipleMaterials(materials) && context.SubMeshCount <= 1) ? DisplayStyle.Flex : DisplayStyle.None;
@@ -354,8 +365,7 @@ namespace JaimeCamachoDev.Multitool.Modeling
         // campos, botones, mensajes de estado) sí usa VisualElement nativos.
         private static VisualElement BuildCustomAtlasWorkflowSection(SelectionContext context)
         {
-            var section = new VisualElement { style = { marginTop = 10 } };
-            section.Add(new Label("Flujo manual de atlas (VAT UV Visual)") { style = { unityFontStyleAndWeight = FontStyle.Bold } });
+            var section = new MTUIPanel("Flujo manual de atlas (VAT UV Visual)") { style = { marginTop = 10 } };
 
             var workflowToggle = new Toggle("Usar constructor manual de atlas y transformaciones UV") { value = useCustomAtlasWorkflow };
             section.Add(workflowToggle);

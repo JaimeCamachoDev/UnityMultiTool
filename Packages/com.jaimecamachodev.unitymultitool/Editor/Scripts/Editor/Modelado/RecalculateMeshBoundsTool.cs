@@ -44,20 +44,21 @@ namespace JaimeCamachoDev.Multitool.Modeling
                     return;
                 }
 
-                contentContainer.Add(new MTUIInfoLabel("Editando bounds de: " + active.name));
+                var boundsPanel = new MTUIPanel("Bounds de " + active.name);
 
                 // Mostrar y permitir la edición de los bounds actuales
                 var centerField = new Vector3Field("Bounds Center") { value = editableBounds.center };
                 centerField.RegisterValueChangedCallback(evt => editableBounds.center = evt.newValue);
-                contentContainer.Add(centerField);
+                boundsPanel.Add(centerField);
 
                 var sizeField = new Vector3Field("Bounds Size") { value = editableBounds.size };
                 sizeField.RegisterValueChangedCallback(evt => editableBounds.size = evt.newValue);
-                contentContainer.Add(sizeField);
+                boundsPanel.Add(sizeField);
+                contentContainer.Add(boundsPanel);
 
                 // Botón para aplicar los cambios
                 var applyButton = new MTUIActionButton("Apply Bounds", ApplyBounds);
-                applyButton.style.marginTop = 6;
+                applyButton.style.marginTop = 10;
                 contentContainer.Add(applyButton);
 
                 // Botón para resetear los bounds originales

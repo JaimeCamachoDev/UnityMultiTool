@@ -51,19 +51,25 @@ namespace JaimeCamachoDev.Multitool.Modeling
                     return;
                 }
 
-                contentContainer.Add(new MTUIInfoLabel("Objeto seleccionado: " + selectedObject.name));
+                var selectionPanel = new MTUIPanel("Objeto seleccionado");
+                selectionPanel.Add(new MTUIInfoLabel($"{selectedObject.name} · {vertices.Length} vértices"));
+                contentContainer.Add(selectionPanel);
 
-                var vertexIdField = new IntegerField("Enter Vertex ID to Display:") { value = vertexID };
+                var queryPanel = new MTUIPanel("Consultar vértice") { style = { marginTop = 10 } };
+
+                var vertexIdField = new IntegerField("Vertex ID") { value = vertexID };
                 vertexIdField.RegisterValueChangedCallback(evt => vertexID = evt.newValue);
-                contentContainer.Add(vertexIdField);
+                queryPanel.Add(vertexIdField);
 
-                var positionLabel = new Label { style = { marginTop = 6, whiteSpace = WhiteSpace.Normal } };
+                var resultBox = new MTUIPanel(null) { style = { marginTop = 8 } };
+                var positionLabel = new MTUIInfoLabel { style = { whiteSpace = WhiteSpace.Normal, marginBottom = 0 } };
+                resultBox.Add(positionLabel);
 
                 void RefreshPositionLabel()
                 {
                     positionLabel.text = vertexID >= 0 && vertices != null && vertexID < vertices.Length
-                        ? $"Vertex {vertexID} World Position:\nX: {vertexWorldPosition.x}\nY: {vertexWorldPosition.y}\nZ: {vertexWorldPosition.z}"
-                        : string.Empty;
+                        ? $"Vertex {vertexID} — posición mundial\nX: {vertexWorldPosition.x:F4}   Y: {vertexWorldPosition.y:F4}   Z: {vertexWorldPosition.z:F4}"
+                        : "Pulsa \"Display Vertex ID\" para consultar su posición mundial.";
                 }
 
                 var displayButton = new MTUIActionButton("Display Vertex ID", () =>
@@ -72,10 +78,11 @@ namespace JaimeCamachoDev.Multitool.Modeling
                     RefreshPositionLabel();
                 });
                 displayButton.style.marginTop = 6;
-                contentContainer.Add(displayButton);
+                queryPanel.Add(displayButton);
+                queryPanel.Add(resultBox);
+                contentContainer.Add(queryPanel);
 
                 RefreshPositionLabel();
-                contentContainer.Add(positionLabel);
             }
 
             // Sigue la selección de la escena mientras la herramienta esté abierta
