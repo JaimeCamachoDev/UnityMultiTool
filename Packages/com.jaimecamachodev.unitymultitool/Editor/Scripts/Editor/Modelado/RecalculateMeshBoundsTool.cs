@@ -15,84 +15,67 @@ namespace JaimeCamachoDev.Multitool.Modeling
         {
             var root = new VisualElement();
             root.Add(new Label("Mesh Bounds Adjuster") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginBottom = 6 } });
+            root.Add(new HelpBox("Selecciona en la escena un objeto con MeshFilter para ajustar los bounds de su Mesh.", HelpBoxMessageType.Info));
 
             var contentContainer = new VisualElement { style = { marginTop = 6 } };
-
-            // Campo para seleccionar el MeshFilter
-            var objectField = new ObjectField("Target MeshFilter") { objectType = typeof(MeshFilter), allowSceneObjects = true, value = targetMeshFilter };
-
-            void SyncTarget(MeshFilter newTarget)
-            {
-                if (newTarget != targetMeshFilter)
-                {
-                    SetTarget(newTarget);
-                }
-                objectField.SetValueWithoutNotify(targetMeshFilter);
-                RefreshContent(contentContainer);
-            }
-
-            objectField.RegisterValueChangedCallback(evt => SyncTarget(evt.newValue as MeshFilter));
-            root.Add(objectField);
             root.Add(contentContainer);
 
-            // Sigue la selección de la escena mientras la herramienta esté abierta
-            void OnSelectionChanged()
+            void RefreshContent()
             {
-                if (Selection.activeGameObject != null)
+                contentContainer.Clear();
+
+                GameObject active = Selection.activeGameObject;
+                MeshFilter meshFilter = active != null ? active.GetComponent<MeshFilter>() : null;
+
+                if (meshFilter != targetMeshFilter)
                 {
-                    MeshFilter meshFilter = Selection.activeGameObject.GetComponent<MeshFilter>();
-                    if (meshFilter != null)
-                    {
-                        SyncTarget(meshFilter);
-                    }
+                    SetTarget(meshFilter);
                 }
+
+                if (meshFilter == null)
+                {
+                    contentContainer.Add(new HelpBox("Selecciona un objeto con MeshFilter en la escena para continuar.", HelpBoxMessageType.Warning));
+                    return;
+                }
+
+                if (meshFilter.sharedMesh == null)
+                {
+                    contentContainer.Add(new HelpBox($"El MeshFilter de '{active.name}' no tiene ninguna Mesh asignada.", HelpBoxMessageType.Warning));
+                    return;
+                }
+
+                contentContainer.Add(new MTUIInfoLabel("Editando bounds de: " + active.name));
+
+                // Mostrar y permitir la edición de los bounds actuales
+                var centerField = new Vector3Field("Bounds Center") { value = editableBounds.center };
+                centerField.RegisterValueChangedCallback(evt => editableBounds.center = evt.newValue);
+                contentContainer.Add(centerField);
+
+                var sizeField = new Vector3Field("Bounds Size") { value = editableBounds.size };
+                sizeField.RegisterValueChangedCallback(evt => editableBounds.size = evt.newValue);
+                contentContainer.Add(sizeField);
+
+                // Botón para aplicar los cambios
+                var applyButton = new MTUIActionButton("Apply Bounds", ApplyBounds);
+                applyButton.style.marginTop = 6;
+                contentContainer.Add(applyButton);
+
+                // Botón para resetear los bounds originales
+                contentContainer.Add(new MTUIActionButton("Reset Bounds to last saved Mesh Bounds", () =>
+                {
+                    ResetBounds();
+                    centerField.SetValueWithoutNotify(editableBounds.center);
+                    sizeField.SetValueWithoutNotify(editableBounds.size);
+                }, MTUIColors.NeutralBackground, MTUIColors.NeutralBorder, MTUIColors.NeutralText));
             }
 
-            root.RegisterCallback<AttachToPanelEvent>(_ => Selection.selectionChanged += OnSelectionChanged);
-            root.RegisterCallback<DetachFromPanelEvent>(_ => Selection.selectionChanged -= OnSelectionChanged);
+            // Sigue la selección de la escena mientras la herramienta esté abierta
+            root.RegisterCallback<AttachToPanelEvent>(_ => Selection.selectionChanged += RefreshContent);
+            root.RegisterCallback<DetachFromPanelEvent>(_ => Selection.selectionChanged -= RefreshContent);
 
-            RefreshContent(contentContainer);
+            RefreshContent();
 
             return root;
-        }
-
-        private static void RefreshContent(VisualElement container)
-        {
-            container.Clear();
-
-            if (targetMeshFilter == null)
-            {
-                container.Add(new HelpBox("Drag a GameObject with a MeshFilter here.", HelpBoxMessageType.Info));
-                return;
-            }
-
-            if (targetMeshFilter.sharedMesh == null)
-            {
-                container.Add(new HelpBox("The selected GameObject's MeshFilter has no Mesh assigned.", HelpBoxMessageType.Warning));
-                return;
-            }
-
-            // Mostrar y permitir la edición de los bounds actuales
-            var centerField = new Vector3Field("Bounds Center") { value = editableBounds.center };
-            centerField.RegisterValueChangedCallback(evt => editableBounds.center = evt.newValue);
-            container.Add(centerField);
-
-            var sizeField = new Vector3Field("Bounds Size") { value = editableBounds.size };
-            sizeField.RegisterValueChangedCallback(evt => editableBounds.size = evt.newValue);
-            container.Add(sizeField);
-
-            // Botón para aplicar los cambios
-            var applyButton = new MTUIActionButton("Apply Bounds", ApplyBounds);
-            applyButton.style.marginTop = 6;
-            container.Add(applyButton);
-
-            // Botón para resetear los bounds originales
-            container.Add(new MTUIActionButton("Reset Bounds to last saved Mesh Bounds", () =>
-            {
-                ResetBounds();
-                centerField.SetValueWithoutNotify(editableBounds.center);
-                sizeField.SetValueWithoutNotify(editableBounds.size);
-            }, MTUIColors.NeutralBackground, MTUIColors.NeutralBorder, MTUIColors.NeutralText));
         }
 
         private static void ApplyBounds()
