@@ -220,26 +220,29 @@ namespace JaimeCamachoDev.Multitool.Modeling
                 contentContainer.Add(materialScrollView);
 
                 var atlasSizeRow = new VisualElement { style = { flexDirection = FlexDirection.Row, marginTop = 8 } };
-                var atlasSizeButtons = new List<Button>();
+                var atlasSizeButtons = new List<MTUIActionButton>();
 
                 void RefreshAtlasSizeButtons()
                 {
                     for (int i = 0; i < atlasSizeButtons.Count; i++)
                     {
-                        atlasSizeButtons[i].style.unityFontStyleAndWeight = i == atlasSizeIndex ? FontStyle.Bold : FontStyle.Normal;
-                        atlasSizeButtons[i].style.backgroundColor = i == atlasSizeIndex ? MTUIColors.BlueBackground : MTUIColors.NeutralBackground;
+                        bool selected = i == atlasSizeIndex;
+                        atlasSizeButtons[i].SetColors(
+                            selected ? MTUIColors.BlueBackground : MTUIColors.NeutralBackground,
+                            selected ? MTUIColors.BlueBorder : MTUIColors.NeutralBorder,
+                            selected ? MTUIColors.BlueText : MTUIColors.NeutralText);
                     }
                 }
 
                 for (int i = 0; i < atlasSizeLabels.Length; i++)
                 {
                     int index = i;
-                    var sizeButton = new Button(() =>
+                    var sizeButton = new MTUIActionButton(atlasSizeLabels[i], () =>
                     {
                         atlasSizeIndex = Mathf.Clamp(index, 0, atlasSizes.Length - 1);
                         RefreshAtlasSizeButtons();
-                    })
-                    { text = atlasSizeLabels[i], style = { flexGrow = 1 } };
+                    });
+                    sizeButton.style.flexGrow = 1;
                     atlasSizeButtons.Add(sizeButton);
                     atlasSizeRow.Add(sizeButton);
                 }
@@ -250,13 +253,13 @@ namespace JaimeCamachoDev.Multitool.Modeling
                 paddingSlider.RegisterValueChangedCallback(evt => atlasPadding = evt.newValue);
                 contentContainer.Add(paddingSlider);
 
-                Button generateButton = null;
+                MTUIActionButton generateButton = null;
                 HelpBox memoryWarning = null;
 
                 void RefreshGenerateButton()
                 {
                     bool canGenerateAtlas = HasMultipleMaterials(materials) || context.SubMeshCount > 1;
-                    generateButton.SetEnabled(canGenerateAtlas);
+                    generateButton.SetAvailable(canGenerateAtlas);
                 }
 
                 void RefreshMemoryWarning()
@@ -330,11 +333,8 @@ namespace JaimeCamachoDev.Multitool.Modeling
                 cannotGenerateHelpBox.style.display = (!HasMultipleMaterials(materials) && context.SubMeshCount <= 1) ? DisplayStyle.Flex : DisplayStyle.None;
                 contentContainer.Add(cannotGenerateHelpBox);
 
-                generateButton = new Button(() => ConvertSelection(context))
-                {
-                    text = "Generar atlas y material único",
-                    style = { marginTop = 10 }
-                };
+                generateButton = new MTUIActionButton("Generar atlas y material único", () => ConvertSelection(context));
+                generateButton.style.marginTop = 10;
                 RefreshGenerateButton();
                 contentContainer.Add(generateButton);
             }
@@ -428,24 +428,23 @@ namespace JaimeCamachoDev.Multitool.Modeling
                 atlasBuilderFoldout.Add(resolutionField);
 
                 var buttonsRow = new VisualElement { style = { flexDirection = FlexDirection.Row, marginTop = 4 } };
-                buttonsRow.Add(new Button(() =>
+                buttonsRow.Add(new MTUIActionButton("Generar atlas", () =>
                 {
                     GenerateCustomAtlasTexture();
                     RefreshStatus();
                     RefreshAtlasBuilderFoldout();
-                })
-                { text = "Generar atlas" });
+                }));
 
-                var assignAtlasButton = new Button(() =>
+                var assignAtlasButton = new MTUIActionButton("Asignar atlas generado", () =>
                 {
                     customAtlasTexture = customGeneratedAtlas;
                     SetCustomStatus($"Atlas asignado ({customGeneratedAtlas.width}x{customGeneratedAtlas.height}).", MessageType.Info);
                     RefreshStatus();
                     RefreshAtlasInUseSection();
                     canvasContainer.MarkDirtyRepaint();
-                })
-                { text = "Asignar atlas generado", style = { marginLeft = 6 } };
-                assignAtlasButton.SetEnabled(customGeneratedAtlas != null);
+                }, MTUIColors.NeutralBackground, MTUIColors.NeutralBorder, MTUIColors.NeutralText);
+                assignAtlasButton.style.marginLeft = 6;
+                assignAtlasButton.SetAvailable(customGeneratedAtlas != null);
                 buttonsRow.Add(assignAtlasButton);
                 atlasBuilderFoldout.Add(buttonsRow);
 
@@ -529,18 +528,17 @@ namespace JaimeCamachoDev.Multitool.Modeling
                     row.Add(new VisualElement { style = { width = 18, height = 18, backgroundColor = entry.OutlineColor, marginRight = 4 } });
 
                     string label = string.IsNullOrEmpty(entry.DisplayName) ? $"Malla {index + 1}" : entry.DisplayName;
-                    var nameButton = new Button(() =>
+                    bool isActiveEntry = index == customUvPreviewActiveIndex;
+                    var nameButton = new MTUIActionButton(label, () =>
                     {
                         SetActiveCustomUvPreviewIndex(index);
                         RefreshLegendLocal();
                         RefreshTransformSectionLocal();
                         canvasContainer.MarkDirtyRepaint();
-                    })
-                    { text = label };
-                    if (index == customUvPreviewActiveIndex)
-                    {
-                        nameButton.style.unityFontStyleAndWeight = FontStyle.Bold;
-                    }
+                    }, isActiveEntry ? MTUIColors.BlueBackground : MTUIColors.NeutralBackground,
+                       isActiveEntry ? MTUIColors.BlueBorder : MTUIColors.NeutralBorder,
+                       isActiveEntry ? MTUIColors.BlueText : MTUIColors.NeutralText,
+                       TextAnchor.MiddleLeft);
                     row.Add(nameButton);
 
                     scroll.Add(row);
@@ -571,12 +569,32 @@ namespace JaimeCamachoDev.Multitool.Modeling
 
                 var scaleRow = new VisualElement { style = { flexDirection = FlexDirection.Row } };
                 var scaleField = new Vector2Field("Escala") { value = activeEntry != null ? activeEntry.TransformScale : Vector2.one, style = { flexGrow = 1 } };
-                var uniformToggle = new Button { text = "Uniforme" };
 
                 void RefreshUniformToggleVisual()
                 {
-                    uniformToggle.style.backgroundColor = customLockUniformScale ? MTUIColors.BlueBackground : MTUIColors.NeutralBackground;
+                    uniformToggle.SetColors(
+                        customLockUniformScale ? MTUIColors.BlueBackground : MTUIColors.NeutralBackground,
+                        customLockUniformScale ? MTUIColors.BlueBorder : MTUIColors.NeutralBorder,
+                        customLockUniformScale ? MTUIColors.BlueText : MTUIColors.NeutralText);
                 }
+
+                var uniformToggle = new MTUIActionButton("Uniforme", () =>
+                {
+                    customLockUniformScale = !customLockUniformScale;
+                    RefreshUniformToggleVisual();
+                    if (customLockUniformScale)
+                    {
+                        Vector2 current = scaleField.value;
+                        float uniform = Mathf.Max(0.01f, (current.x + current.y) * 0.5f);
+                        Vector2 uniformScale = new Vector2(uniform, uniform);
+                        scaleField.SetValueWithoutNotify(uniformScale);
+                        if (activeEntry != null)
+                        {
+                            activeEntry.TransformScale = uniformScale;
+                            canvasContainer.MarkDirtyRepaint();
+                        }
+                    }
+                });
                 RefreshUniformToggleVisual();
 
                 scaleField.RegisterValueChangedCallback(evt =>
@@ -597,26 +615,8 @@ namespace JaimeCamachoDev.Multitool.Modeling
                     }
                 });
 
-                uniformToggle.clicked += () =>
-                {
-                    customLockUniformScale = !customLockUniformScale;
-                    RefreshUniformToggleVisual();
-                    if (customLockUniformScale)
-                    {
-                        Vector2 current = scaleField.value;
-                        float uniform = Mathf.Max(0.01f, (current.x + current.y) * 0.5f);
-                        Vector2 uniformScale = new Vector2(uniform, uniform);
-                        scaleField.SetValueWithoutNotify(uniformScale);
-                        if (activeEntry != null)
-                        {
-                            activeEntry.TransformScale = uniformScale;
-                            canvasContainer.MarkDirtyRepaint();
-                        }
-                    }
-                };
-
                 scaleField.SetEnabled(controlsEnabled);
-                uniformToggle.SetEnabled(controlsEnabled);
+                uniformToggle.SetAvailable(controlsEnabled);
                 scaleRow.Add(scaleField);
                 scaleRow.Add(uniformToggle);
                 transformContainer.Add(scaleRow);
@@ -649,49 +649,48 @@ namespace JaimeCamachoDev.Multitool.Modeling
             var genericMessage = new HelpBox("Ajusta cada elemento de forma individual y utiliza \"Aplicar UV a la malla\" para guardar los cambios, replicando el flujo de trabajo de VAT UV Visual.", HelpBoxMessageType.None) { style = { marginTop = 6 } };
 
             var actionsRow = new VisualElement { style = { flexDirection = FlexDirection.Row, marginTop = 6 } };
-            Button applyButton = new Button(() =>
+            MTUIActionButton applyButton = new MTUIActionButton("Aplicar UV a la malla", () =>
             {
                 ApplyActiveCustomUvTransform();
                 RefreshStatus();
                 RefreshTransformSection();
                 RefreshLegend();
                 canvasContainer.MarkDirtyRepaint();
-            })
-            { text = "Aplicar UV a la malla" };
+            });
 
-            Button restoreButton = new Button(() =>
+            MTUIActionButton restoreButton = new MTUIActionButton("Restaurar UV originales", () =>
             {
                 RestoreActiveCustomUvToOriginal();
                 RefreshStatus();
                 RefreshTransformSection();
                 RefreshLegend();
                 canvasContainer.MarkDirtyRepaint();
-            })
-            { text = "Restaurar UV originales", style = { marginLeft = 6 } };
+            }, MTUIColors.NeutralBackground, MTUIColors.NeutralBorder, MTUIColors.NeutralText);
+            restoreButton.style.marginLeft = 6;
 
             void RefreshActionButtons()
             {
                 bool enabled = GetActiveCustomUvPreviewEntry() != null;
-                applyButton.SetEnabled(enabled);
-                restoreButton.SetEnabled(enabled);
+                applyButton.SetAvailable(enabled);
+                restoreButton.SetAvailable(enabled);
             }
 
             actionsRow.Add(applyButton);
             actionsRow.Add(restoreButton);
             actionsRow.Add(new VisualElement { style = { flexGrow = 1 } });
-            actionsRow.Add(new Button(() =>
+            actionsRow.Add(new MTUIActionButton("Restablecer gizmo", () =>
             {
                 ResetActiveCustomUvTransform();
                 RefreshTransformSection();
                 canvasContainer.MarkDirtyRepaint();
-            })
-            { text = "Restablecer gizmo" });
-            actionsRow.Add(new Button(() =>
+            }, MTUIColors.NeutralBackground, MTUIColors.NeutralBorder, MTUIColors.NeutralText));
+            var clearMessageButton = new MTUIActionButton("Limpiar mensaje", () =>
             {
                 ClearCustomStatus();
                 RefreshStatus();
-            })
-            { text = "Limpiar mensaje", style = { marginLeft = 6 } });
+            }, MTUIColors.NeutralBackground, MTUIColors.NeutralBorder, MTUIColors.NeutralText);
+            clearMessageButton.style.marginLeft = 6;
+            actionsRow.Add(clearMessageButton);
 
             void RefreshBody()
             {

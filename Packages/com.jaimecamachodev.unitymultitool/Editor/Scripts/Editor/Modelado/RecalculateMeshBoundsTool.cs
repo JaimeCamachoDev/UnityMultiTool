@@ -1,3 +1,4 @@
+using JaimeCamachoDev.Multitool.UI;
 using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine;
@@ -81,16 +82,17 @@ namespace JaimeCamachoDev.Multitool.Modeling
             container.Add(sizeField);
 
             // Botón para aplicar los cambios
-            container.Add(new Button(ApplyBounds) { text = "Apply Bounds", style = { marginTop = 6 } });
+            var applyButton = new MTUIActionButton("Apply Bounds", ApplyBounds);
+            applyButton.style.marginTop = 6;
+            container.Add(applyButton);
 
             // Botón para resetear los bounds originales
-            container.Add(new Button(() =>
+            container.Add(new MTUIActionButton("Reset Bounds to last saved Mesh Bounds", () =>
             {
                 ResetBounds();
                 centerField.SetValueWithoutNotify(editableBounds.center);
                 sizeField.SetValueWithoutNotify(editableBounds.size);
-            })
-            { text = "Reset Bounds to last saved Mesh Bounds" });
+            }, MTUIColors.NeutralBackground, MTUIColors.NeutralBorder, MTUIColors.NeutralText));
         }
 
         private static void ApplyBounds()

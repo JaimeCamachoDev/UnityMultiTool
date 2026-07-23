@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
+using JaimeCamachoDev.Multitool.UI;
 using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine;
@@ -50,7 +51,7 @@ namespace JaimeCamachoDev.Multitool.Modeling
                 }
 
                 var diagnosticsContainer = new VisualElement { style = { marginTop = 6 } };
-                Button combineButton = null;
+                MTUIActionButton combineButton = null;
 
                 void RefreshDiagnostics()
                 {
@@ -133,7 +134,7 @@ namespace JaimeCamachoDev.Multitool.Modeling
                     else
                     {
                         combineButton.style.display = DisplayStyle.Flex;
-                        combineButton.SetEnabled(currentVertexCount != 0);
+                        combineButton.SetAvailable(currentVertexCount != 0);
                     }
                 }
 
@@ -226,11 +227,8 @@ namespace JaimeCamachoDev.Multitool.Modeling
 
                 contentContainer.Add(diagnosticsContainer);
 
-                combineButton = new Button(() => CombineSelection(currentRenderers, currentVertexCount))
-                {
-                    text = "Combinar selección",
-                    style = { marginTop = 10 }
-                };
+                combineButton = new MTUIActionButton("Combinar selección", () => CombineSelection(currentRenderers, currentVertexCount));
+                combineButton.style.marginTop = 10;
                 contentContainer.Add(combineButton);
 
                 RefreshDiagnostics();

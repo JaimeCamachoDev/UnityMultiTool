@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
+using JaimeCamachoDev.Multitool.UI;
 using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine;
@@ -99,13 +100,12 @@ namespace JaimeCamachoDev.Multitool.Modeling
                         pivotField.RegisterValueChangedCallback(evt => customPivotWorld = evt.newValue);
                         customPivotContainer.Add(pivotField);
 
-                        customPivotContainer.Add(new Button(() =>
+                        customPivotContainer.Add(new MTUIActionButton("Centrar gizmo en objeto activo", () =>
                         {
                             UpdateHandleFromSelection(true);
                             var field = customPivotContainer.Q<Vector3Field>();
                             field?.SetValueWithoutNotify(customPivotWorld);
-                        })
-                        { text = "Centrar gizmo en objeto activo" });
+                        }, MTUIColors.NeutralBackground, MTUIColors.NeutralBorder, MTUIColors.NeutralText));
                     }
                     else
                     {
@@ -207,7 +207,9 @@ namespace JaimeCamachoDev.Multitool.Modeling
                 var referenceUseBoundsToggle = new Toggle("Tomar centro del bound de la referencia") { value = referenceUseBounds, style = { marginLeft = 15 } };
                 var referenceOffsetField = new Vector3Field("Offset local adicional") { value = referenceLocalOffset, style = { marginLeft = 15 } };
                 var autoFollowToggle = new Toggle("Mantener gizmo sincronizado con la referencia") { value = autoFollowReference, style = { marginLeft = 15 } };
-                var alignButton = new Button(() => AlignGizmoToReference(true)) { text = "Alinear gizmo a la referencia", style = { marginLeft = 15 } };
+                var alignButton = new MTUIActionButton("Alinear gizmo a la referencia", () => AlignGizmoToReference(true),
+                    MTUIColors.NeutralBackground, MTUIColors.NeutralBorder, MTUIColors.NeutralText);
+                alignButton.style.marginLeft = 15;
 
                 void SetReferenceControlsEnabled(bool enabled)
                 {
@@ -215,7 +217,7 @@ namespace JaimeCamachoDev.Multitool.Modeling
                     referenceUseBoundsToggle.SetEnabled(enabled);
                     referenceOffsetField.SetEnabled(enabled);
                     autoFollowToggle.SetEnabled(enabled);
-                    alignButton.SetEnabled(enabled);
+                    alignButton.SetAvailable(enabled);
                 }
 
                 SetReferenceControlsEnabled(useReferenceObject);
@@ -285,11 +287,9 @@ namespace JaimeCamachoDev.Multitool.Modeling
                 RefreshReferenceHelpBox();
                 contentContainer.Add(referenceHelpBoxContainer);
 
-                contentContainer.Add(new Button(ApplyPivotToSelection)
-                {
-                    text = "Aplicar pivote a la selección",
-                    style = { marginTop = 10 }
-                });
+                var applyPivotButton = new MTUIActionButton("Aplicar pivote a la selección", ApplyPivotToSelection);
+                applyPivotButton.style.marginTop = 10;
+                contentContainer.Add(applyPivotButton);
             }
 
             root.RegisterCallback<AttachToPanelEvent>(_ => Selection.selectionChanged += RefreshContent);
