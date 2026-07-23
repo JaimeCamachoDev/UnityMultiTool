@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine.UIElements;
+using JaimeCamachoDev.Multitool.UI;
 using System.IO;
 
 namespace JaimeCamachoDev.Multitool.Modeling
@@ -15,11 +16,13 @@ namespace JaimeCamachoDev.Multitool.Modeling
         {
             var root = new VisualElement();
             root.Add(new Label("Separar Submeshes por Material") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginBottom = 6 } });
+            root.Add(new HelpBox("Selecciona en la escena un objeto con MeshFilter (o una Mesh en la ventana Project) para rellenar el campo automáticamente, o arrástrala a mano.", HelpBoxMessageType.Info));
 
             var statusContainer = new VisualElement { style = { marginTop = 6 } };
-            var splitButton = new Button(SplitAndSaveSubmeshes) { text = "Dividir y Guardar Submeshes", style = { marginTop = 10 } };
+            var splitButton = new MTUIActionButton("Dividir y Guardar Submeshes", SplitAndSaveSubmeshes);
+            splitButton.style.marginTop = 10;
 
-            root.Add(new Label("1. Arrastra la malla a dividir") { style = { unityFontStyleAndWeight = FontStyle.Bold } });
+            root.Add(new Label("1. Malla a dividir") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginTop = 6 } });
             var meshField = new ObjectField("Mesh") { objectType = typeof(Mesh), allowSceneObjects = true, value = meshMultiMat };
             meshField.RegisterValueChangedCallback(evt =>
             {
@@ -28,7 +31,7 @@ namespace JaimeCamachoDev.Multitool.Modeling
             });
             root.Add(meshField);
 
-            root.Add(new Label("2. Arrastra la carpeta de destino") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginTop = 10 } });
+            root.Add(new Label("2. Carpeta de destino") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginTop = 10 } });
             var folderField = new ObjectField("Carpeta de Destino") { objectType = typeof(DefaultAsset), allowSceneObjects = false, value = destinationFolder };
             folderField.RegisterValueChangedCallback(evt =>
             {
@@ -40,12 +43,35 @@ namespace JaimeCamachoDev.Multitool.Modeling
             root.Add(statusContainer);
             root.Add(splitButton);
 
+            // Si seleccionas un objeto con MeshFilter en la escena, o una Mesh en el Project,
+            // rellena el campo automáticamente (igual que Advanced Mesh Combiner reacciona a la
+            // selección), sin bloquear la posibilidad de arrastrar una malla manualmente.
+            void SyncFromSelection()
+            {
+                Mesh candidate = Selection.activeObject as Mesh;
+                if (candidate == null && Selection.activeGameObject != null)
+                {
+                    MeshFilter filter = Selection.activeGameObject.GetComponent<MeshFilter>();
+                    candidate = filter != null ? filter.sharedMesh : null;
+                }
+
+                if (candidate != null && candidate != meshMultiMat)
+                {
+                    meshMultiMat = candidate;
+                    meshField.SetValueWithoutNotify(meshMultiMat);
+                    RefreshStatus(statusContainer, splitButton);
+                }
+            }
+
+            root.RegisterCallback<AttachToPanelEvent>(_ => Selection.selectionChanged += SyncFromSelection);
+            root.RegisterCallback<DetachFromPanelEvent>(_ => Selection.selectionChanged -= SyncFromSelection);
+
             RefreshStatus(statusContainer, splitButton);
 
             return root;
         }
 
-        private static void RefreshStatus(VisualElement container, Button splitButton)
+        private static void RefreshStatus(VisualElement container, MTUIActionButton splitButton)
         {
             container.Clear();
 
@@ -69,7 +95,7 @@ namespace JaimeCamachoDev.Multitool.Modeling
                 container.Add(new HelpBox("Arrastra una carpeta del proyecto en el paso 2 para continuar.", HelpBoxMessageType.Info));
             }
 
-            splitButton.SetEnabled(hasMultipleSubmeshes && destinationFolder != null);
+            splitButton.SetAvailable(hasMultipleSubmeshes && destinationFolder != null);
         }
 
         private static void SplitAndSaveSubmeshes()
