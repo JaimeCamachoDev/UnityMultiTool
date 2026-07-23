@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using JaimeCamachoDev.Multitool.UI;
 using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine;
@@ -34,6 +35,22 @@ namespace JaimeCamachoDev.Multitool.Modeling
             root.Add(objectField);
             root.Add(statusContainer);
 
+            // Sigue la selección de la escena mientras la herramienta esté abierta, sin bloquear
+            // el arrastre manual (igual que Advanced Mesh Combiner reacciona a la selección).
+            void SyncFromSelection()
+            {
+                if (Selection.activeGameObject != null && Selection.activeGameObject != sceneObject)
+                {
+                    sceneObject = Selection.activeGameObject;
+                    objectField.SetValueWithoutNotify(sceneObject);
+                    RefreshStatus(statusContainer);
+                    RefreshAnalyzeButton(analyzeButtonContainer, resultsContainer);
+                }
+            }
+
+            root.RegisterCallback<AttachToPanelEvent>(_ => Selection.selectionChanged += SyncFromSelection);
+            root.RegisterCallback<DetachFromPanelEvent>(_ => Selection.selectionChanged -= SyncFromSelection);
+
             root.Add(new Label("Triangle Detection Settings") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginTop = 10 } });
 
             var minAreaField = new FloatField("Min Area Threshold") { value = minAreaThreshold };
@@ -48,13 +65,12 @@ namespace JaimeCamachoDev.Multitool.Modeling
 
             void AddDistanceButton(string label, float distance)
             {
-                root.Add(new Button(() =>
+                root.Add(new MTUIActionButton(label, () =>
                 {
                     SetThresholdsForDistance(distance);
                     minAreaField.SetValueWithoutNotify(minAreaThreshold);
                     maxEdgeField.SetValueWithoutNotify(maxEdgeRatioThreshold);
-                })
-                { text = label });
+                }, MTUIColors.NeutralBackground, MTUIColors.NeutralBorder, MTUIColors.NeutralText));
             }
 
             AddDistanceButton("1 cm (Close)", 0.01f);
@@ -92,13 +108,12 @@ namespace JaimeCamachoDev.Multitool.Modeling
             container.Clear();
 
             bool canAnalyze = sceneObject != null && sceneObject.GetComponent<MeshFilter>() != null && sceneObject.GetComponent<MeshFilter>().sharedMesh != null;
-            var analyzeButton = new Button(() =>
+            var analyzeButton = new MTUIActionButton("Analyze", () =>
             {
                 Analyze();
                 RefreshResults(resultsContainer);
-            })
-            { text = "Analyze" };
-            analyzeButton.SetEnabled(canAnalyze);
+            });
+            analyzeButton.SetAvailable(canAnalyze);
             container.Add(analyzeButton);
         }
 

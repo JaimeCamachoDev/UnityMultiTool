@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using JaimeCamachoDev.Multitool.UI;
 using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine;
@@ -21,126 +22,107 @@ namespace JaimeCamachoDev.Multitool.Modeling
         {
             var root = new VisualElement();
 
-            root.Add(new Label("1. Drag objects with MeshRenderer") { style = { unityFontStyleAndWeight = FontStyle.Bold } });
-            root.Add(new HelpBox("Drag the objects here to modify their meshes.", HelpBoxMessageType.Info));
+            root.Add(new Label("Hollow Shell") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginBottom = 6 } });
+            root.Add(new HelpBox("Genera una versión hueca de la malla recortando por un plano. Selecciona en la escena los objetos con MeshRenderer que quieres modificar.", HelpBoxMessageType.Info));
 
-            var listContainer = new VisualElement { style = { marginTop = 6 } };
-            var statusContainer = new VisualElement { style = { marginTop = 10 } };
+            var contentContainer = new VisualElement { style = { marginTop = 6 } };
+            root.Add(contentContainer);
 
-            Button previewButton = null;
-            Button undoButton = null;
-            Button saveButton = null;
-
-            void RefreshStatus()
+            void RefreshContent()
             {
-                statusContainer.Clear();
+                contentContainer.Clear();
 
-                bool hasValidObjects = gameObjectsToModify.Any(o => o != null);
-                bool hasPreview = originalMeshes.Count > 0;
+                gameObjectsToModify.Clear();
+                gameObjectsToModify.AddRange(Selection.gameObjects);
 
-                if (!hasValidObjects)
+                if (gameObjectsToModify.Count == 0)
                 {
-                    statusContainer.Add(new HelpBox("Arrastra al menos un objeto en el paso 1 antes de previsualizar.", HelpBoxMessageType.Info));
-                }
-                else if (clippingPlane == null)
-                {
-                    statusContainer.Add(new HelpBox("Arrastra un plano de recorte en el paso 2 antes de previsualizar.", HelpBoxMessageType.Info));
-                }
-                else if (!hasPreview)
-                {
-                    statusContainer.Add(new HelpBox("Pulsa \"Preview clip\" antes de guardar los cambios.", HelpBoxMessageType.Info));
+                    contentContainer.Add(new HelpBox("Selecciona uno o más objetos con MeshRenderer en la escena para continuar.", HelpBoxMessageType.Warning));
+                    return;
                 }
 
-                previewButton.SetEnabled(hasValidObjects && clippingPlane != null);
-                undoButton.SetEnabled(hasPreview);
-                saveButton.SetEnabled(hasPreview);
-            }
-
-            void RefreshList()
-            {
-                listContainer.Clear();
-                for (int i = 0; i < gameObjectsToModify.Count; i++)
+                var selectionPanel = new MTUIPanel("Objetos seleccionados");
+                foreach (GameObject go in gameObjectsToModify)
                 {
-                    int index = i;
-                    var field = new ObjectField($"Object {i + 1}") { objectType = typeof(GameObject), allowSceneObjects = true, value = gameObjectsToModify[index] };
-                    field.RegisterValueChangedCallback(evt =>
+                    selectionPanel.Add(new MTUIInfoLabel("• " + go.name));
+                }
+                contentContainer.Add(selectionPanel);
+
+                contentContainer.Add(new Label("Plano de recorte") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginTop = 6 } });
+                var clippingPlaneField = new ObjectField("Clipping Plane") { objectType = typeof(Transform), allowSceneObjects = true, value = clippingPlane };
+                contentContainer.Add(clippingPlaneField);
+
+                contentContainer.Add(new Label("Dirección de recorte") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginTop = 10 } });
+                var clipDirectionField = new EnumField("Clip Direction", clipDirection);
+                clipDirectionField.RegisterValueChangedCallback(evt => clipDirection = (ClipDirection)evt.newValue);
+                contentContainer.Add(clipDirectionField);
+
+                var statusContainer = new VisualElement { style = { marginTop = 10 } };
+                contentContainer.Add(statusContainer);
+
+                MTUIActionButton previewButton = null;
+                MTUIActionButton undoButton = null;
+                MTUIActionButton saveButton = null;
+
+                void RefreshStatus()
+                {
+                    statusContainer.Clear();
+
+                    bool hasPreview = originalMeshes.Count > 0;
+
+                    if (clippingPlane == null)
                     {
-                        gameObjectsToModify[index] = evt.newValue as GameObject;
-                        RefreshStatus();
-                    });
-                    listContainer.Add(field);
+                        statusContainer.Add(new HelpBox("Arrastra un plano de recorte para continuar.", HelpBoxMessageType.Info));
+                    }
+                    else if (!hasPreview)
+                    {
+                        statusContainer.Add(new HelpBox("Pulsa \"Preview clip\" antes de guardar los cambios.", HelpBoxMessageType.Info));
+                    }
+
+                    previewButton.SetAvailable(clippingPlane != null);
+                    undoButton.SetAvailable(hasPreview);
+                    saveButton.SetAvailable(hasPreview);
                 }
+
+                clippingPlaneField.RegisterValueChangedCallback(evt =>
+                {
+                    clippingPlane = evt.newValue as Transform;
+                    RefreshStatus();
+                });
+
+                // Botón para previsualizar el recorte
+                previewButton = new MTUIActionButton("Preview clip", () =>
+                {
+                    PreviewMeshModification();
+                    RefreshStatus();
+                });
+                previewButton.style.marginTop = 10;
+                contentContainer.Add(previewButton);
+
+                // Botón para deshacer la vista previa y restaurar las mallas originales
+                undoButton = new MTUIActionButton("Undo preview", () =>
+                {
+                    RestoreOriginalMeshes();
+                    RefreshStatus();
+                }, MTUIColors.NeutralBackground, MTUIColors.NeutralBorder, MTUIColors.NeutralText);
+                contentContainer.Add(undoButton);
+
+                // Botón para guardar los cambios y reemplazar las mallas originales
+                saveButton = new MTUIActionButton("Save changes", () =>
+                {
+                    SaveModifiedMeshes();
+                    RefreshStatus();
+                });
+                saveButton.style.marginTop = 10;
+                contentContainer.Add(saveButton);
+
+                RefreshStatus();
             }
 
-            root.Add(listContainer);
+            root.RegisterCallback<AttachToPanelEvent>(_ => Selection.selectionChanged += RefreshContent);
+            root.RegisterCallback<DetachFromPanelEvent>(_ => Selection.selectionChanged -= RefreshContent);
 
-            // Botones para agregar/eliminar objetos de la lista
-            var addRemoveRow = new VisualElement { style = { flexDirection = FlexDirection.Row, marginTop = 4 } };
-            addRemoveRow.Add(new Button(() =>
-            {
-                gameObjectsToModify.Add(null);
-                RefreshList();
-                RefreshStatus();
-            })
-            { text = "Add object" });
-
-            addRemoveRow.Add(new Button(() =>
-            {
-                if (gameObjectsToModify.Count > 0)
-                {
-                    gameObjectsToModify.RemoveAt(gameObjectsToModify.Count - 1);
-                    RefreshList();
-                    RefreshStatus();
-                }
-            })
-            { text = "Remove last object", style = { marginLeft = 6 } });
-            root.Add(addRemoveRow);
-
-            root.Add(new Label("2. Drag the Clipping Plane") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginTop = 10 } });
-            var clippingPlaneField = new ObjectField("Clipping Plane") { objectType = typeof(Transform), allowSceneObjects = true, value = clippingPlane };
-            clippingPlaneField.RegisterValueChangedCallback(evt =>
-            {
-                clippingPlane = evt.newValue as Transform;
-                RefreshStatus();
-            });
-            root.Add(clippingPlaneField);
-
-            root.Add(new Label("3. Select clip direction") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginTop = 10 } });
-            var clipDirectionField = new EnumField("Clip Direction", clipDirection);
-            clipDirectionField.RegisterValueChangedCallback(evt => clipDirection = (ClipDirection)evt.newValue);
-            root.Add(clipDirectionField);
-
-            root.Add(statusContainer);
-
-            // Botón para previsualizar el recorte
-            previewButton = new Button(() =>
-            {
-                PreviewMeshModification();
-                RefreshStatus();
-            })
-            { text = "Preview clip", style = { marginTop = 10 } };
-            root.Add(previewButton);
-
-            // Botón para deshacer la vista previa y restaurar las mallas originales
-            undoButton = new Button(() =>
-            {
-                RestoreOriginalMeshes();
-                RefreshStatus();
-            })
-            { text = "Undo preview" };
-            root.Add(undoButton);
-
-            // Botón para guardar los cambios y reemplazar las mallas originales
-            saveButton = new Button(() =>
-            {
-                SaveModifiedMeshes();
-                RefreshStatus();
-            })
-            { text = "Save changes", style = { marginTop = 10 } };
-            root.Add(saveButton);
-
-            RefreshList();
-            RefreshStatus();
+            RefreshContent();
 
             return root;
         }

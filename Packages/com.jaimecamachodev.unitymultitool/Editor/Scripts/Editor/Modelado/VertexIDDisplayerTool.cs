@@ -1,3 +1,4 @@
+using JaimeCamachoDev.Multitool.UI;
 using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine;
@@ -22,19 +23,38 @@ namespace JaimeCamachoDev.Multitool.Modeling
 
             var contentContainer = new VisualElement { style = { marginTop = 6 } };
 
-            var objectField = new ObjectField("GameObject") { objectType = typeof(GameObject), allowSceneObjects = true, value = selectedObject };
-            objectField.RegisterValueChangedCallback(evt =>
+            void SetSelectedObject(GameObject go)
             {
-                selectedObject = evt.newValue as GameObject;
+                selectedObject = go;
 
                 // Solo releer la malla y sus vértices cuando cambia el objeto seleccionado
                 MeshFilter changedMeshFilter = selectedObject != null ? selectedObject.GetComponent<MeshFilter>() : null;
                 selectedMesh = changedMeshFilter != null ? changedMeshFilter.sharedMesh : null;
                 vertices = selectedMesh != null ? selectedMesh.vertices : null;
+            }
 
+            var objectField = new ObjectField("GameObject") { objectType = typeof(GameObject), allowSceneObjects = true, value = selectedObject };
+            objectField.RegisterValueChangedCallback(evt =>
+            {
+                SetSelectedObject(evt.newValue as GameObject);
                 RefreshContent(contentContainer);
             });
             root.Add(objectField);
+
+            // Sigue la selección de la escena mientras la herramienta esté abierta, sin bloquear
+            // el arrastre manual (igual que Advanced Mesh Combiner reacciona a la selección).
+            void SyncFromSelection()
+            {
+                if (Selection.activeGameObject != null && Selection.activeGameObject != selectedObject)
+                {
+                    SetSelectedObject(Selection.activeGameObject);
+                    objectField.SetValueWithoutNotify(selectedObject);
+                    RefreshContent(contentContainer);
+                }
+            }
+
+            root.RegisterCallback<AttachToPanelEvent>(_ => Selection.selectionChanged += SyncFromSelection);
+            root.RegisterCallback<DetachFromPanelEvent>(_ => Selection.selectionChanged -= SyncFromSelection);
 
             root.Add(contentContainer);
             RefreshContent(contentContainer);
@@ -48,6 +68,7 @@ namespace JaimeCamachoDev.Multitool.Modeling
 
             if (selectedObject == null)
             {
+                container.Add(new HelpBox("Selecciona un objeto de la escena, o arrástralo arriba, para mostrar sus vértices.", HelpBoxMessageType.Info));
                 return;
             }
 
@@ -70,12 +91,13 @@ namespace JaimeCamachoDev.Multitool.Modeling
                     : string.Empty;
             }
 
-            container.Add(new Button(() =>
+            var displayButton = new MTUIActionButton("Display Vertex ID", () =>
             {
                 DisplayVertexID();
                 RefreshPositionLabel();
-            })
-            { text = "Display Vertex ID", style = { marginTop = 6 } });
+            });
+            displayButton.style.marginTop = 6;
+            container.Add(displayButton);
 
             RefreshPositionLabel();
             container.Add(positionLabel);
