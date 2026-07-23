@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
+using JaimeCamachoDev.Multitool.UI;
 using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine;
@@ -72,7 +73,9 @@ namespace JaimeCamachoDev.Multitool.Modeling
                 preserveToggle.RegisterValueChangedCallback(evt => preserveChildrenWorldTransform = evt.newValue);
                 contentContainer.Add(preserveToggle);
 
-                contentContainer.Add(new Button(ApplyResetToSelection) { text = "Aplicar Reset XForm a la selección", style = { marginTop = 8 } });
+                var applyButton = new MTUIActionButton("Aplicar Reset XForm a la selección", ApplyResetToSelection);
+                applyButton.style.marginTop = 8;
+                contentContainer.Add(applyButton);
             }
 
             // Sigue la selección de la escena mientras la herramienta esté abierta

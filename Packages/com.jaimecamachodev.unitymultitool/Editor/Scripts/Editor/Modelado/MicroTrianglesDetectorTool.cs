@@ -129,12 +129,11 @@ namespace JaimeCamachoDev.Multitool.Modeling
                 for (int i = 0; i < problematicTriangles.Count; i++)
                 {
                     int index = i;
-                    scroll.Add(new Button(() =>
+                    scroll.Add(new MTUIActionButton($"Triangle {i + 1}", () =>
                     {
                         selectedTriangleIndex = index;
                         FocusOnTriangle(problematicTriangles[index]);
-                    })
-                    { text = $"Triangle {i + 1}" });
+                    }, MTUIColors.NeutralBackground, MTUIColors.NeutralBorder, MTUIColors.NeutralText));
                 }
                 container.Add(scroll);
             }

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using JaimeCamachoDev.Multitool.UI;
 using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine;
@@ -18,12 +19,11 @@ namespace JaimeCamachoDev.Multitool.Modeling
 
             var resultsContainer = new VisualElement { style = { marginTop = 10 } };
 
-            var findButton = new Button(() =>
+            var findButton = new MTUIActionButton("Find Objects with Multiple Materials", () =>
             {
                 FindObjectsWithMultipleMaterials();
                 RefreshResults(resultsContainer);
-            })
-            { text = "Find Objects with Multiple Materials" };
+            });
             root.Add(findButton);
 
             root.Add(resultsContainer);
@@ -47,17 +47,20 @@ namespace JaimeCamachoDev.Multitool.Modeling
             var scroll = new ScrollView { style = { maxHeight = 240 } };
             foreach (GameObject go in objectsWithMultiMaterial)
             {
-                var row = new VisualElement { style = { flexDirection = FlexDirection.Row, marginBottom = 2 } };
+                var row = new VisualElement { style = { flexDirection = FlexDirection.Row, alignItems = Align.Center, marginBottom = 2 } };
 
-                row.Add(new Button(() =>
+                var selectButton = new MTUIActionButton(go.name, () =>
                 {
                     Selection.activeGameObject = go;
                     EditorGUIUtility.PingObject(go);
-                })
-                { text = go.name, style = { width = 200 } });
+                }, MTUIColors.NeutralBackground, MTUIColors.NeutralBorder, MTUIColors.NeutralText, TextAnchor.MiddleLeft);
+                selectButton.style.width = 200;
+                row.Add(selectButton);
 
-                row.Add(new Button(() => EditorGUIUtility.PingObject(go))
-                { text = "Highlight", style = { width = 100 } });
+                var highlightButton = new MTUIActionButton("Highlight", () => EditorGUIUtility.PingObject(go),
+                    MTUIColors.NeutralBackground, MTUIColors.NeutralBorder, MTUIColors.NeutralText);
+                highlightButton.style.width = 100;
+                row.Add(highlightButton);
 
                 scroll.Add(row);
             }

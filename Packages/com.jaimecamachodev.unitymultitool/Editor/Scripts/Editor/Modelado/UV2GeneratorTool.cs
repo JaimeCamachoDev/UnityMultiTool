@@ -1,3 +1,4 @@
+using JaimeCamachoDev.Multitool.UI;
 using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine;
@@ -15,7 +16,8 @@ namespace JaimeCamachoDev.Multitool.Modeling
             root.Add(new Label("Generar UV2 para Lightmapping") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginBottom = 6 } });
 
             var statusContainer = new VisualElement();
-            var generateButton = new Button(GenerateUV2) { text = "Generar UV2", style = { marginTop = 6 } };
+            var generateButton = new MTUIActionButton("Generar UV2", GenerateUV2);
+            generateButton.style.marginTop = 6;
 
             // Campo para arrastrar y soltar la malla
             var meshField = new ObjectField("Malla para Generar UV2") { objectType = typeof(Mesh), allowSceneObjects = false, value = selectedMesh };
@@ -23,14 +25,14 @@ namespace JaimeCamachoDev.Multitool.Modeling
             {
                 selectedMesh = evt.newValue as Mesh;
                 RefreshStatus(statusContainer);
-                generateButton.SetEnabled(selectedMesh != null);
+                generateButton.SetAvailable(selectedMesh != null);
             });
             root.Add(meshField);
             root.Add(statusContainer);
             root.Add(generateButton);
 
             RefreshStatus(statusContainer);
-            generateButton.SetEnabled(selectedMesh != null);
+            generateButton.SetAvailable(selectedMesh != null);
 
             return root;
         }

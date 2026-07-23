@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine.UIElements;
+using JaimeCamachoDev.Multitool.UI;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -32,8 +33,8 @@ namespace JaimeCamachoDev.Multitool.Modeling
 
             var statusContainer = new VisualElement { style = { marginTop = 6 } };
 
-            Button adjustButton = null;
-            Button undoButton = null;
+            MTUIActionButton adjustButton = null;
+            MTUIActionButton undoButton = null;
 
             void RefreshStatus()
             {
@@ -52,8 +53,8 @@ namespace JaimeCamachoDev.Multitool.Modeling
                     statusContainer.Add(new HelpBox("Rows y Columns deben ser mayores que 0.", HelpBoxMessageType.Warning));
                 }
 
-                adjustButton.SetEnabled(hasValidFilters && hasValidGrid);
-                undoButton.SetEnabled(hasBackup);
+                adjustButton.SetAvailable(hasValidFilters && hasValidGrid);
+                undoButton.SetAvailable(hasBackup);
             }
 
             // Input para las filas y columnas
@@ -99,46 +100,45 @@ namespace JaimeCamachoDev.Multitool.Modeling
                     row.Add(filterField);
 
                     // Botón para eliminar el Mesh Filter de la lista
-                    row.Add(new Button(() =>
+                    var removeButton = new MTUIActionButton("Remove", () =>
                     {
                         selectedMeshFilters.RemoveAt(index);
                         RefreshList();
                         RefreshStatus();
-                    })
-                    { text = "Remove", style = { width = 70 } });
+                    }, MTUIColors.NeutralBackground, MTUIColors.NeutralBorder, MTUIColors.NeutralText);
+                    removeButton.style.width = 70;
+                    row.Add(removeButton);
 
                     listContainer.Add(row);
                 }
             }
 
             // Botón para agregar un nuevo Mesh Filter
-            root.Add(new Button(() =>
+            root.Add(new MTUIActionButton("Add Mesh Filter", () =>
             {
                 selectedMeshFilters.Add(null);
                 RefreshList();
                 RefreshStatus();
-            })
-            { text = "Add Mesh Filter" });
+            }));
 
             root.Add(listContainer);
             root.Add(statusContainer);
 
             // Botón para ajustar UVs
-            adjustButton = new Button(() =>
+            adjustButton = new MTUIActionButton("Adjust UVs", () =>
             {
                 AdjustUVs();
                 RefreshStatus();
-            })
-            { text = "Adjust UVs", style = { marginTop = 6 } };
+            });
+            adjustButton.style.marginTop = 6;
             root.Add(adjustButton);
 
             // Botón para deshacer los cambios
-            undoButton = new Button(() =>
+            undoButton = new MTUIActionButton("Undo last change", () =>
             {
                 UndoUVChanges();
                 RefreshStatus();
-            })
-            { text = "Undo last change" };
+            }, MTUIColors.NeutralBackground, MTUIColors.NeutralBorder, MTUIColors.NeutralText);
             root.Add(undoButton);
 
             RefreshList();
