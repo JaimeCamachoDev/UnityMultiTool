@@ -15,7 +15,7 @@ namespace VZOptizone
         {
             GUILayout.Label("Lightmap Checker", EditorStyles.boldLabel);
 
-            // Bot�n para revisar la escena en busca de lightmaps
+            // Botón para revisar la escena en busca de lightmaps
             if (GUILayout.Button("Check Scene for Lightmaps"))
             {
                 CheckScene();
@@ -25,7 +25,7 @@ namespace VZOptizone
 
             // Mostrar los objetos con lightmaps
             GUILayout.Label("Objects with Lightmaps:", EditorStyles.boldLabel);
-            scrollPosLightmaps = EditorGUILayout.BeginScrollView(scrollPosLightmaps, GUILayout.Height(600)); // Ajusta la altura seg�n sea necesario
+            scrollPosLightmaps = EditorGUILayout.BeginScrollView(scrollPosLightmaps, GUILayout.Height(600)); // Ajusta la altura según sea necesario
             DisplayObjectList(lightmappedObjects);
             EditorGUILayout.EndScrollView();
         }
@@ -54,7 +54,7 @@ namespace VZOptizone
 
                 GUIStyle style = new GUIStyle(GUI.skin.button);
 
-                // Resaltar el bot�n si es el objeto seleccionado
+                // Resaltar el botón si es el objeto seleccionado
                 if (obj == selectedObject)
                 {
                     style.normal.textColor = Color.green;
