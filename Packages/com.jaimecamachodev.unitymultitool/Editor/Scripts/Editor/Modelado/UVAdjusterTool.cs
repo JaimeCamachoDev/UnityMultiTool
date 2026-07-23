@@ -1,6 +1,5 @@
 using UnityEngine;
 using UnityEditor;
-using UnityEditor.UIElements;
 using UnityEngine.UIElements;
 using JaimeCamachoDev.Multitool.UI;
 using System.Collections.Generic;
@@ -29,120 +28,104 @@ namespace JaimeCamachoDev.Multitool.Modeling
         {
             var root = new VisualElement();
             root.Add(new Label("UV Adjuster Tool") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginBottom = 6 } });
-            root.Add(new HelpBox("Esta herramienta modifica las UVs directamente sobre el Mesh asset compartido: afecta a todos los objetos que usen esa misma malla en el proyecto.", HelpBoxMessageType.Info));
+            root.Add(new HelpBox("Selecciona en la escena uno o más objetos con MeshFilter. Esta herramienta modifica las UVs directamente sobre el Mesh asset compartido: afecta a todos los objetos que usen esa misma malla en el proyecto.", HelpBoxMessageType.Info));
 
-            var statusContainer = new VisualElement { style = { marginTop = 6 } };
+            var contentContainer = new VisualElement { style = { marginTop = 6 } };
+            root.Add(contentContainer);
 
-            MTUIActionButton adjustButton = null;
-            MTUIActionButton undoButton = null;
-
-            void RefreshStatus()
+            void RefreshContent()
             {
-                statusContainer.Clear();
+                contentContainer.Clear();
 
-                bool hasValidFilters = selectedMeshFilters.Any(f => f != null);
-                bool hasValidGrid = rows > 0 && columns > 0;
-                bool hasBackup = originalUVs.Count > 0;
-
-                if (!hasValidFilters)
+                selectedMeshFilters.Clear();
+                foreach (GameObject go in Selection.gameObjects)
                 {
-                    statusContainer.Add(new HelpBox("Añade al menos un Mesh Filter para poder ajustar sus UVs.", HelpBoxMessageType.Info));
-                }
-                else if (!hasValidGrid)
-                {
-                    statusContainer.Add(new HelpBox("Rows y Columns deben ser mayores que 0.", HelpBoxMessageType.Warning));
+                    MeshFilter filter = go != null ? go.GetComponent<MeshFilter>() : null;
+                    if (filter != null)
+                    {
+                        selectedMeshFilters.Add(filter);
+                    }
                 }
 
-                adjustButton.SetAvailable(hasValidFilters && hasValidGrid);
-                undoButton.SetAvailable(hasBackup);
+                if (selectedMeshFilters.Count == 0)
+                {
+                    contentContainer.Add(new HelpBox("Selecciona uno o más objetos con MeshFilter en la escena para continuar.", HelpBoxMessageType.Warning));
+                    return;
+                }
+
+                var selectionPanel = new MTUIPanel("Objetos seleccionados");
+                foreach (MeshFilter filter in selectedMeshFilters)
+                {
+                    selectionPanel.Add(new MTUIInfoLabel("• " + filter.gameObject.name));
+                }
+                contentContainer.Add(selectionPanel);
+
+                var statusContainer = new VisualElement { style = { marginTop = 6 } };
+
+                MTUIActionButton adjustButton = null;
+                MTUIActionButton undoButton = null;
+
+                void RefreshStatus()
+                {
+                    statusContainer.Clear();
+
+                    bool hasValidGrid = rows > 0 && columns > 0;
+                    bool hasBackup = selectedMeshFilters.Any(f => f != null && originalUVs.ContainsKey(f));
+
+                    if (!hasValidGrid)
+                    {
+                        statusContainer.Add(new HelpBox("Rows y Columns deben ser mayores que 0.", HelpBoxMessageType.Warning));
+                    }
+
+                    adjustButton.SetAvailable(hasValidGrid);
+                    undoButton.SetAvailable(hasBackup);
+                }
+
+                // Input para las filas y columnas
+                var rowsField = new IntegerField("Rows") { value = rows };
+                rowsField.RegisterValueChangedCallback(evt => { rows = evt.newValue; RefreshStatus(); });
+                contentContainer.Add(rowsField);
+
+                var columnsField = new IntegerField("Columns") { value = columns };
+                columnsField.RegisterValueChangedCallback(evt => { columns = evt.newValue; RefreshStatus(); });
+                contentContainer.Add(columnsField);
+
+                // Input para la posición en la cuadrícula
+                var gridXField = new IntegerField("Grid X") { value = gridX };
+                gridXField.RegisterValueChangedCallback(evt => gridX = evt.newValue);
+                contentContainer.Add(gridXField);
+
+                var gridYField = new IntegerField("Grid Y") { value = gridY };
+                gridYField.RegisterValueChangedCallback(evt => gridY = evt.newValue);
+                contentContainer.Add(gridYField);
+
+                contentContainer.Add(statusContainer);
+
+                // Botón para ajustar UVs
+                adjustButton = new MTUIActionButton("Adjust UVs", () =>
+                {
+                    AdjustUVs();
+                    RefreshStatus();
+                });
+                adjustButton.style.marginTop = 6;
+                contentContainer.Add(adjustButton);
+
+                // Botón para deshacer los cambios
+                undoButton = new MTUIActionButton("Undo last change", () =>
+                {
+                    UndoUVChanges();
+                    RefreshStatus();
+                }, MTUIColors.NeutralBackground, MTUIColors.NeutralBorder, MTUIColors.NeutralText);
+                contentContainer.Add(undoButton);
+
+                RefreshStatus();
             }
 
-            // Input para las filas y columnas
-            var rowsField = new IntegerField("Rows") { value = rows };
-            rowsField.RegisterValueChangedCallback(evt => { rows = evt.newValue; RefreshStatus(); });
-            root.Add(rowsField);
+            // Sigue la selección de la escena mientras la herramienta esté abierta
+            root.RegisterCallback<AttachToPanelEvent>(_ => Selection.selectionChanged += RefreshContent);
+            root.RegisterCallback<DetachFromPanelEvent>(_ => Selection.selectionChanged -= RefreshContent);
 
-            var columnsField = new IntegerField("Columns") { value = columns };
-            columnsField.RegisterValueChangedCallback(evt => { columns = evt.newValue; RefreshStatus(); });
-            root.Add(columnsField);
-
-            // Input para la posición en la cuadrícula
-            var gridXField = new IntegerField("Grid X") { value = gridX };
-            gridXField.RegisterValueChangedCallback(evt => gridX = evt.newValue);
-            root.Add(gridXField);
-
-            var gridYField = new IntegerField("Grid Y") { value = gridY };
-            gridYField.RegisterValueChangedCallback(evt => gridY = evt.newValue);
-            root.Add(gridYField);
-
-            // Mostrar lista de Mesh Filters seleccionados
-            root.Add(new Label("Select Mesh Filters") { style = { marginTop = 10 } });
-
-            var listContainer = new VisualElement();
-
-            void RefreshList()
-            {
-                listContainer.Clear();
-
-                for (int i = 0; i < selectedMeshFilters.Count; i++)
-                {
-                    int index = i;
-                    var row = new VisualElement { style = { flexDirection = FlexDirection.Row, marginBottom = 2 } };
-
-                    // Campo para seleccionar un Mesh Filter
-                    var filterField = new ObjectField { objectType = typeof(MeshFilter), allowSceneObjects = true, value = selectedMeshFilters[index] };
-                    filterField.style.flexGrow = 1;
-                    filterField.RegisterValueChangedCallback(evt =>
-                    {
-                        selectedMeshFilters[index] = evt.newValue as MeshFilter;
-                        RefreshStatus();
-                    });
-                    row.Add(filterField);
-
-                    // Botón para eliminar el Mesh Filter de la lista
-                    var removeButton = new MTUIActionButton("Remove", () =>
-                    {
-                        selectedMeshFilters.RemoveAt(index);
-                        RefreshList();
-                        RefreshStatus();
-                    }, MTUIColors.NeutralBackground, MTUIColors.NeutralBorder, MTUIColors.NeutralText);
-                    removeButton.style.width = 70;
-                    row.Add(removeButton);
-
-                    listContainer.Add(row);
-                }
-            }
-
-            // Botón para agregar un nuevo Mesh Filter
-            root.Add(new MTUIActionButton("Add Mesh Filter", () =>
-            {
-                selectedMeshFilters.Add(null);
-                RefreshList();
-                RefreshStatus();
-            }));
-
-            root.Add(listContainer);
-            root.Add(statusContainer);
-
-            // Botón para ajustar UVs
-            adjustButton = new MTUIActionButton("Adjust UVs", () =>
-            {
-                AdjustUVs();
-                RefreshStatus();
-            });
-            adjustButton.style.marginTop = 6;
-            root.Add(adjustButton);
-
-            // Botón para deshacer los cambios
-            undoButton = new MTUIActionButton("Undo last change", () =>
-            {
-                UndoUVChanges();
-                RefreshStatus();
-            }, MTUIColors.NeutralBackground, MTUIColors.NeutralBorder, MTUIColors.NeutralText);
-            root.Add(undoButton);
-
-            RefreshList();
-            RefreshStatus();
+            RefreshContent();
 
             return root;
         }

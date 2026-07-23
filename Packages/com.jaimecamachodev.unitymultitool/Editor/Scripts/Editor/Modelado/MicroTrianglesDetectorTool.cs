@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using JaimeCamachoDev.Multitool.UI;
 using UnityEditor;
-using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -20,101 +19,81 @@ namespace JaimeCamachoDev.Multitool.Modeling
         {
             var root = new VisualElement();
             root.Add(new Label("Micro Triangle Detector") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginBottom = 6 } });
+            root.Add(new HelpBox("Selecciona en la escena un objeto con MeshFilter para analizar sus triángulos.", HelpBoxMessageType.Info));
 
-            var statusContainer = new VisualElement();
-            var analyzeButtonContainer = new VisualElement { style = { marginTop = 10 } };
-            var resultsContainer = new VisualElement { style = { marginTop = 6 } };
+            var contentContainer = new VisualElement { style = { marginTop = 6 } };
+            root.Add(contentContainer);
 
-            var objectField = new ObjectField("Scene Object") { objectType = typeof(GameObject), allowSceneObjects = true, value = sceneObject };
-            objectField.RegisterValueChangedCallback(evt =>
+            void RefreshContent()
             {
-                sceneObject = evt.newValue as GameObject;
-                RefreshStatus(statusContainer);
-                RefreshAnalyzeButton(analyzeButtonContainer, resultsContainer);
-            });
-            root.Add(objectField);
-            root.Add(statusContainer);
+                contentContainer.Clear();
 
-            // Sigue la selección de la escena mientras la herramienta esté abierta, sin bloquear
-            // el arrastre manual (igual que Advanced Mesh Combiner reacciona a la selección).
-            void SyncFromSelection()
-            {
-                if (Selection.activeGameObject != null && Selection.activeGameObject != sceneObject)
+                sceneObject = Selection.activeGameObject;
+
+                if (sceneObject == null)
                 {
-                    sceneObject = Selection.activeGameObject;
-                    objectField.SetValueWithoutNotify(sceneObject);
-                    RefreshStatus(statusContainer);
-                    RefreshAnalyzeButton(analyzeButtonContainer, resultsContainer);
+                    contentContainer.Add(new HelpBox("Selecciona un objeto de la escena para continuar.", HelpBoxMessageType.Warning));
+                    return;
                 }
-            }
 
-            root.RegisterCallback<AttachToPanelEvent>(_ => Selection.selectionChanged += SyncFromSelection);
-            root.RegisterCallback<DetachFromPanelEvent>(_ => Selection.selectionChanged -= SyncFromSelection);
-
-            root.Add(new Label("Triangle Detection Settings") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginTop = 10 } });
-
-            var minAreaField = new FloatField("Min Area Threshold") { value = minAreaThreshold };
-            minAreaField.RegisterValueChangedCallback(evt => minAreaThreshold = evt.newValue);
-            root.Add(minAreaField);
-
-            var maxEdgeField = new FloatField("Max Edge Ratio Threshold") { value = maxEdgeRatioThreshold };
-            maxEdgeField.RegisterValueChangedCallback(evt => maxEdgeRatioThreshold = evt.newValue);
-            root.Add(maxEdgeField);
-
-            root.Add(new Label("Set Thresholds Based on Distance") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginTop = 10 } });
-
-            void AddDistanceButton(string label, float distance)
-            {
-                root.Add(new MTUIActionButton(label, () =>
+                MeshFilter filter = sceneObject.GetComponent<MeshFilter>();
+                if (filter == null || filter.sharedMesh == null)
                 {
-                    SetThresholdsForDistance(distance);
-                    minAreaField.SetValueWithoutNotify(minAreaThreshold);
-                    maxEdgeField.SetValueWithoutNotify(maxEdgeRatioThreshold);
-                }, MTUIColors.NeutralBackground, MTUIColors.NeutralBorder, MTUIColors.NeutralText));
+                    contentContainer.Add(new HelpBox($"'{sceneObject.name}' no tiene un MeshFilter con una Mesh asignada.", HelpBoxMessageType.Warning));
+                    return;
+                }
+
+                contentContainer.Add(new MTUIInfoLabel("Objeto seleccionado: " + sceneObject.name));
+
+                contentContainer.Add(new Label("Triangle Detection Settings") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginTop = 10 } });
+
+                var minAreaField = new FloatField("Min Area Threshold") { value = minAreaThreshold };
+                minAreaField.RegisterValueChangedCallback(evt => minAreaThreshold = evt.newValue);
+                contentContainer.Add(minAreaField);
+
+                var maxEdgeField = new FloatField("Max Edge Ratio Threshold") { value = maxEdgeRatioThreshold };
+                maxEdgeField.RegisterValueChangedCallback(evt => maxEdgeRatioThreshold = evt.newValue);
+                contentContainer.Add(maxEdgeField);
+
+                contentContainer.Add(new Label("Set Thresholds Based on Distance") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginTop = 10 } });
+
+                void AddDistanceButton(string label, float distance)
+                {
+                    contentContainer.Add(new MTUIActionButton(label, () =>
+                    {
+                        SetThresholdsForDistance(distance);
+                        minAreaField.SetValueWithoutNotify(minAreaThreshold);
+                        maxEdgeField.SetValueWithoutNotify(maxEdgeRatioThreshold);
+                    }, MTUIColors.NeutralBackground, MTUIColors.NeutralBorder, MTUIColors.NeutralText));
+                }
+
+                AddDistanceButton("1 cm (Close)", 0.01f);
+                AddDistanceButton("10 cm (Near)", 0.1f);
+                AddDistanceButton("1 m (Mid-range)", 1f);
+                AddDistanceButton("10 m (Far)", 10f);
+                AddDistanceButton("100 m (Very Far)", 100f);
+
+                var resultsContainer = new VisualElement { style = { marginTop = 6 } };
+
+                var analyzeButton = new MTUIActionButton("Analyze", () =>
+                {
+                    Analyze();
+                    RefreshResults(resultsContainer);
+                });
+                analyzeButton.style.marginTop = 10;
+                contentContainer.Add(analyzeButton);
+
+                contentContainer.Add(resultsContainer);
+                RefreshResults(resultsContainer);
             }
 
-            AddDistanceButton("1 cm (Close)", 0.01f);
-            AddDistanceButton("10 cm (Near)", 0.1f);
-            AddDistanceButton("1 m (Mid-range)", 1f);
-            AddDistanceButton("10 m (Far)", 10f);
-            AddDistanceButton("100 m (Very Far)", 100f);
+            // Sigue la selección de la escena mientras la herramienta esté abierta
+            root.RegisterCallback<AttachToPanelEvent>(_ => Selection.selectionChanged += RefreshContent);
+            root.RegisterCallback<DetachFromPanelEvent>(_ => Selection.selectionChanged -= RefreshContent);
 
-            root.Add(analyzeButtonContainer);
-            root.Add(resultsContainer);
-
-            RefreshStatus(statusContainer);
-            RefreshAnalyzeButton(analyzeButtonContainer, resultsContainer);
-            RefreshResults(resultsContainer);
+            RefreshContent();
 
             return root;
-        }
-
-        private static void RefreshStatus(VisualElement container)
-        {
-            container.Clear();
-
-            if (sceneObject == null)
-            {
-                container.Add(new HelpBox("Arrastra un objeto de la escena con MeshFilter para poder analizarlo.", HelpBoxMessageType.Info));
-            }
-            else if (sceneObject.GetComponent<MeshFilter>() == null || sceneObject.GetComponent<MeshFilter>().sharedMesh == null)
-            {
-                container.Add(new HelpBox("El objeto seleccionado no tiene un MeshFilter con una Mesh asignada.", HelpBoxMessageType.Warning));
-            }
-        }
-
-        private static void RefreshAnalyzeButton(VisualElement container, VisualElement resultsContainer)
-        {
-            container.Clear();
-
-            bool canAnalyze = sceneObject != null && sceneObject.GetComponent<MeshFilter>() != null && sceneObject.GetComponent<MeshFilter>().sharedMesh != null;
-            var analyzeButton = new MTUIActionButton("Analyze", () =>
-            {
-                Analyze();
-                RefreshResults(resultsContainer);
-            });
-            analyzeButton.SetAvailable(canAnalyze);
-            container.Add(analyzeButton);
         }
 
         private static void RefreshResults(VisualElement container)

@@ -1,6 +1,5 @@
 using JaimeCamachoDev.Multitool.UI;
 using UnityEditor;
-using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -14,41 +13,54 @@ namespace JaimeCamachoDev.Multitool.Modeling
         {
             var root = new VisualElement();
             root.Add(new Label("Generar UV2 para Lightmapping") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginBottom = 6 } });
+            root.Add(new HelpBox("Selecciona una Mesh en el Project, o un objeto con MeshFilter en la escena, para generar su UV2.", HelpBoxMessageType.Info));
 
-            var statusContainer = new VisualElement();
-            var generateButton = new MTUIActionButton("Generar UV2", GenerateUV2);
-            generateButton.style.marginTop = 6;
+            var contentContainer = new VisualElement { style = { marginTop = 6 } };
+            root.Add(contentContainer);
 
-            // Campo para arrastrar y soltar la malla
-            var meshField = new ObjectField("Malla para Generar UV2") { objectType = typeof(Mesh), allowSceneObjects = false, value = selectedMesh };
-            meshField.RegisterValueChangedCallback(evt =>
+            void RefreshContent()
             {
-                selectedMesh = evt.newValue as Mesh;
-                RefreshStatus(statusContainer);
-                generateButton.SetAvailable(selectedMesh != null);
-            });
-            root.Add(meshField);
-            root.Add(statusContainer);
-            root.Add(generateButton);
+                contentContainer.Clear();
 
-            RefreshStatus(statusContainer);
-            generateButton.SetAvailable(selectedMesh != null);
+                selectedMesh = ResolveMeshFromSelection();
+
+                if (selectedMesh == null)
+                {
+                    contentContainer.Add(new HelpBox("Selecciona una Mesh o un objeto con MeshFilter para continuar.", HelpBoxMessageType.Warning));
+                    return;
+                }
+
+                contentContainer.Add(new MTUIInfoLabel("Malla seleccionada: " + selectedMesh.name));
+
+                if (AssetImporter.GetAtPath(AssetDatabase.GetAssetPath(selectedMesh)) is ModelImporter)
+                {
+                    contentContainer.Add(new HelpBox("Esta malla proviene de un modelo importado (FBX/OBJ/etc). Los cambios se perderán al reimportar el modelo; considera duplicar la malla como un asset independiente antes de generar el UV2.", HelpBoxMessageType.Warning));
+                }
+
+                var generateButton = new MTUIActionButton("Generar UV2", GenerateUV2);
+                generateButton.style.marginTop = 6;
+                contentContainer.Add(generateButton);
+            }
+
+            // Sigue la selección de la escena/proyecto mientras la herramienta esté abierta
+            root.RegisterCallback<AttachToPanelEvent>(_ => Selection.selectionChanged += RefreshContent);
+            root.RegisterCallback<DetachFromPanelEvent>(_ => Selection.selectionChanged -= RefreshContent);
+
+            RefreshContent();
 
             return root;
         }
 
-        private static void RefreshStatus(VisualElement container)
+        private static Mesh ResolveMeshFromSelection()
         {
-            container.Clear();
+            Mesh candidate = Selection.activeObject as Mesh;
+            if (candidate == null && Selection.activeGameObject != null)
+            {
+                MeshFilter filter = Selection.activeGameObject.GetComponent<MeshFilter>();
+                candidate = filter != null ? filter.sharedMesh : null;
+            }
 
-            if (selectedMesh == null)
-            {
-                container.Add(new HelpBox("Arrastra una Mesh para poder generar su UV2.", HelpBoxMessageType.Info));
-            }
-            else if (AssetImporter.GetAtPath(AssetDatabase.GetAssetPath(selectedMesh)) is ModelImporter)
-            {
-                container.Add(new HelpBox("Esta malla proviene de un modelo importado (FBX/OBJ/etc). Los cambios se perderán al reimportar el modelo; considera duplicar la malla como un asset independiente antes de generar el UV2.", HelpBoxMessageType.Warning));
-            }
+            return candidate;
         }
 
         private static void GenerateUV2()
