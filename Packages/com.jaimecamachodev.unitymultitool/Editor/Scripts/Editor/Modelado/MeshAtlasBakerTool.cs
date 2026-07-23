@@ -580,6 +580,8 @@ namespace JaimeCamachoDev.Multitool.Modeling
                 var scaleRow = new VisualElement { style = { flexDirection = FlexDirection.Row } };
                 var scaleField = new Vector2Field("Escala") { value = activeEntry != null ? activeEntry.TransformScale : Vector2.one, style = { flexGrow = 1 } };
 
+                MTUIActionButton uniformToggle = null;
+
                 void RefreshUniformToggleVisual()
                 {
                     uniformToggle.SetColors(
@@ -588,7 +590,7 @@ namespace JaimeCamachoDev.Multitool.Modeling
                         customLockUniformScale ? MTUIColors.BlueText : MTUIColors.NeutralText);
                 }
 
-                var uniformToggle = new MTUIActionButton("Uniforme", () =>
+                uniformToggle = new MTUIActionButton("Uniforme", () =>
                 {
                     customLockUniformScale = !customLockUniformScale;
                     RefreshUniformToggleVisual();
