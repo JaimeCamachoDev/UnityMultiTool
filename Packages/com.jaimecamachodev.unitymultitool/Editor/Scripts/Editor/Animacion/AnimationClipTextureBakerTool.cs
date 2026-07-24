@@ -328,12 +328,13 @@ namespace JaimeCamachoDev.Multitool.Animation
             }
 
             int vertCount = skin.sharedMesh.vertexCount;
-            int texHeight = Mathf.NextPowerOfTwo(vertCount);
+            int texWidth = Mathf.NextPowerOfTwo(vertCount);
             Mesh sampleMesh = new Mesh();
 
             Texture2D firstPositionTexture = null;
             Texture2D firstNormalTexture = null;
             int firstFrameCount = 0;
+            float firstClipLength = 0f;
 
             try
             {
@@ -374,7 +375,7 @@ namespace JaimeCamachoDev.Multitool.Animation
                     }
 
                     (Texture2D positionTexture, Texture2D normalTexture) = BakeInfoTextures(
-                        computeShader, infoList, vertCount, frames, texHeight,
+                        computeShader, infoList, vertCount, frames, texWidth,
                         $"{target.name}.{clip.name}.PosTex", $"{target.name}.{clip.name}.NormalTex");
 
                     string posPath = AssetDatabase.GenerateUniqueAssetPath(Path.Combine(targetFolder, positionTexture.name + ".asset").Replace("\\", "/"));
@@ -387,6 +388,7 @@ namespace JaimeCamachoDev.Multitool.Animation
                         firstPositionTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(posPath);
                         firstNormalTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(normalPath);
                         firstFrameCount = frames;
+                        firstClipLength = clip.length;
                     }
                 }
             }
@@ -406,13 +408,18 @@ namespace JaimeCamachoDev.Multitool.Animation
                 return;
             }
 
-            Mesh bakedMesh = BuildBakedMesh(skin, vertCount, texHeight, target.name + "_VAT");
+            Mesh bakedMesh = BuildBakedMesh(skin, vertCount, texWidth, target.name + "_VAT");
             string meshPath = AssetDatabase.GenerateUniqueAssetPath(Path.Combine(targetFolder, bakedMesh.name + ".asset").Replace("\\", "/"));
             AssetDatabase.CreateAsset(bakedMesh, meshPath);
 
             Material originalMaterial = skin.sharedMaterial;
             Material vatMaterial = new Material(shader) { name = target.name + "_VAT_Mat" };
 
+            // Nombres de propiedad reales de los shaders VAT Lit/Unlit (Single/Multiple Mesh).
+            if (vatMaterial.HasProperty("_Position_texture")) vatMaterial.SetTexture("_Position_texture", firstPositionTexture);
+            if (vatMaterial.HasProperty("_Animation_lenght")) vatMaterial.SetFloat("_Animation_lenght", firstClipLength);
+
+            // Nombres alternativos por si algún shader VAT usa la convención antigua.
             if (vatMaterial.HasProperty("_VAT_positions")) vatMaterial.SetTexture("_VAT_positions", firstPositionTexture);
             if (vatMaterial.HasProperty("_VAT_normals")) vatMaterial.SetTexture("_VAT_normals", firstNormalTexture);
             if (vatMaterial.HasProperty("_Framecount")) vatMaterial.SetFloat("_Framecount", firstFrameCount);
@@ -456,11 +463,14 @@ namespace JaimeCamachoDev.Multitool.Animation
         }
 
         private static (Texture2D position, Texture2D normal) BakeInfoTextures(
-            ComputeShader computeShader, List<VertInfo> infoList, int vertCount, int frames, int texHeight,
+            ComputeShader computeShader, List<VertInfo> infoList, int vertCount, int frames, int texWidth,
             string positionName, string normalName)
         {
-            var positionRt = new RenderTexture(frames, texHeight, 0, RenderTextureFormat.ARGBHalf) { enableRandomWrite = true };
-            var normalRt = new RenderTexture(frames, texHeight, 0, RenderTextureFormat.ARGBHalf) { enableRandomWrite = true };
+            // Width = vertex axis, height = frame axis: matches how the VAT shaders
+            // sample this texture (vertex from the built-in VertexID node on X, a
+            // continuous 0..1 time value on Y).
+            var positionRt = new RenderTexture(texWidth, frames, 0, RenderTextureFormat.ARGBHalf) { enableRandomWrite = true };
+            var normalRt = new RenderTexture(texWidth, frames, 0, RenderTextureFormat.ARGBHalf) { enableRandomWrite = true };
             positionRt.Create();
             normalRt.Create();
 
@@ -474,7 +484,7 @@ namespace JaimeCamachoDev.Multitool.Animation
             computeShader.SetTexture(kernel, "OutPosition", positionRt);
             computeShader.SetTexture(kernel, "OutNormal", normalRt);
 
-            computeShader.Dispatch(kernel, Mathf.CeilToInt(frames / 8f), Mathf.CeilToInt(texHeight / 8f), 1);
+            computeShader.Dispatch(kernel, Mathf.CeilToInt(texWidth / 8f), Mathf.CeilToInt(frames / 8f), 1);
 
             buffer.Release();
 
@@ -492,7 +502,7 @@ namespace JaimeCamachoDev.Multitool.Animation
             return (positionTexture, normalTexture);
         }
 
-        private static Mesh BuildBakedMesh(SkinnedMeshRenderer skin, int vertCount, int texHeight, string meshName)
+        private static Mesh BuildBakedMesh(SkinnedMeshRenderer skin, int vertCount, int texWidth, string meshName)
         {
             Mesh source = skin.sharedMesh;
             Mesh baked = new Mesh
@@ -518,13 +528,13 @@ namespace JaimeCamachoDev.Multitool.Animation
                 baked.SetUVs(0, new List<Vector2>(source.uv));
             }
 
-            // UV1: fila del vértice dentro de la textura VAT (columna=frame, fila=vértice).
-            // El shader parte de este UV base y le suma el desplazamiento de columna según
-            // _Timeposition, por lo que aquí X siempre queda en 0.
+            // UV1: columna del vértice dentro de la textura VAT (columna=vértice, fila=frame).
+            // El shader de referencia obtiene el índice de vértice del nodo VertexID en vez
+            // de leer este UV, pero se deja escrito por si algún shader VAT lo usa en su lugar.
             var vatUv = new List<Vector2>(vertCount);
             for (int v = 0; v < vertCount; v++)
             {
-                vatUv.Add(new Vector2(0f, (v + 0.5f) / texHeight));
+                vatUv.Add(new Vector2((v + 0.5f) / texWidth, 0f));
             }
             baked.SetUVs(1, vatUv);
 
