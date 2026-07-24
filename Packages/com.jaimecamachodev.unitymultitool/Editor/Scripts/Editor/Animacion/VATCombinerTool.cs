@@ -10,24 +10,31 @@ using UnityEngine.UIElements;
 
 namespace JaimeCamachoDev.Multitool.Animation
 {
-    // Un VAT solo puede hornear una única SkinnedMeshRenderer. Cuando un personaje está
-    // formado por varias (cuerpo, ropa, pelo...), esta herramienta las combina en una
-    // sola malla — conservando huesos y bind poses — dejándola lista para VAT Painter
-    // y, después, para VAT Baker.
+    // Último paso al preparar un VAT Multiple Mesh: combina en una única malla y un único
+    // draw call todas las instancias estáticas pintadas con VAT Painter (todas comparten el
+    // mismo VAT Single Mesh de origen). Cada instancia conserva su posición y rotación de
+    // mundo horneadas en los canales UV2/UV3 — exactamente como los lee el shader VAT
+    // Multiple Mesh real (verificado contra LIT_VAT_MultipleMesh.shadergraph) — para que el
+    // vertex shader pueda recolocar la posición muestreada de _Position_texture en su sitio.
     public static class VATCombinerTool
     {
         private static GameObject rootObject;
-        private static string outputName = "CombinedForVAT";
+        private static Shader multipleMeshShader;
+        private static string outputName = "VATCrowd";
         private static DefaultAsset outputFolder;
-        private static bool disableOriginalRenderers = true;
+        private static bool removeOriginalsAfterCombine = true;
         private const string DefaultOutputPath = "Assets/BakedAnimationTex";
+
+        private static bool useCustomBounds;
+        private static Vector3 customBoundsCenter = Vector3.zero;
+        private static Vector3 customBoundsSize = Vector3.one * 20f;
 
         public static VisualElement CreateGUI()
         {
             var root = new VisualElement();
             root.Add(new Label("VAT Combiner") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginBottom = 6 } });
             root.Add(new HelpBox(
-                "Selecciona en la escena el objeto raíz de un personaje formado por varias SkinnedMeshRenderer (cuerpo, ropa, pelo...) para combinarlas en una única malla lista para hornear un VAT.",
+                "Selecciona en la escena el objeto raíz de las instancias VAT pintadas con VAT Painter (por ejemplo 'VATPaintRoot') para combinarlas en un único draw call. Las instancias que compartan el mismo material se combinan juntas; su posición y rotación de mundo quedan horneadas en la malla para el shader VAT Multiple Mesh.",
                 HelpBoxMessageType.Info));
 
             var contentContainer = new VisualElement { style = { marginTop = 6 } };
@@ -45,36 +52,46 @@ namespace JaimeCamachoDev.Multitool.Animation
                     return;
                 }
 
-                List<SkinnedMeshRenderer> renderers = rootObject.GetComponentsInChildren<SkinnedMeshRenderer>()
-                    .Where(r => r.sharedMesh != null)
-                    .ToList();
+                List<MeshInstance> instances = CollectInstances(rootObject);
 
-                if (renderers.Count == 0)
+                if (instances.Count == 0)
                 {
-                    contentContainer.Add(new HelpBox($"'{rootObject.name}' no tiene ninguna SkinnedMeshRenderer con una Mesh asignada en sus hijos.", HelpBoxMessageType.Warning));
+                    contentContainer.Add(new HelpBox($"'{rootObject.name}' no tiene ninguna MeshFilter+MeshRenderer con malla y material asignados en sus hijos.", HelpBoxMessageType.Warning));
                     return;
                 }
 
-                bool unreadable = renderers.Any(r => !r.sharedMesh.isReadable);
-                if (unreadable)
-                {
-                    contentContainer.Add(new HelpBox("Alguna de las mallas no tiene Read/Write habilitado en sus Import Settings; actívalo para poder combinarlas.", HelpBoxMessageType.Error));
-                    return;
-                }
+                Dictionary<Material, List<MeshInstance>> groups = GroupByMaterial(instances);
 
-                var listPanel = new MTUIPanel("Mallas detectadas");
-                foreach (SkinnedMeshRenderer renderer in renderers)
+                var listPanel = new MTUIPanel("Instancias detectadas");
+                listPanel.Add(new MTUIInfoLabel($"{instances.Count} instancia(s) en {groups.Count} grupo(s) de material."));
+                foreach (var group in groups)
                 {
-                    listPanel.Add(new MTUIInfoLabel($"• {renderer.name} — {renderer.sharedMesh.vertexCount} vértices, {renderer.sharedMaterials.Length} material(es)"));
+                    string materialName = group.Key != null ? group.Key.name : "(sin material)";
+                    int vertexCount = group.Value[0].Filter.sharedMesh.vertexCount;
+                    bool uniform = group.Value.All(i => i.Filter.sharedMesh.vertexCount == vertexCount);
+                    string suffix = uniform ? $"{vertexCount} vértices/instancia" : "vértices por instancia NO uniformes — no se puede combinar";
+                    listPanel.Add(new MTUIInfoLabel($"• {materialName}: {group.Value.Count} instancia(s), {suffix}"));
                 }
                 contentContainer.Add(listPanel);
 
-                if (renderers.Count == 1)
+                bool anyGroupInvalid = groups.Values.Any(g => !g.All(i => i.Filter.sharedMesh.vertexCount == g[0].Filter.sharedMesh.vertexCount));
+                if (anyGroupInvalid)
                 {
-                    contentContainer.Add(new HelpBox("Solo se detectó una malla: no es necesario combinar, ya puedes hornearla directamente en VAT Baker.", HelpBoxMessageType.Info));
+                    contentContainer.Add(new HelpBox(
+                        "Todas las instancias combinadas juntas deben provenir del mismo VAT Single Mesh (mismo número de vértices), porque el shader VAT Multiple Mesh reconstruye cada instancia a partir de un único _Position_texture compartido.",
+                        HelpBoxMessageType.Error));
                 }
 
                 var optionsPanel = new MTUIPanel("Opciones") { style = { marginTop = 10 } };
+
+                var shaderField = new ObjectField("Shader VAT Multiple Mesh") { objectType = typeof(Shader), allowSceneObjects = false, value = multipleMeshShader };
+                shaderField.RegisterValueChangedCallback(evt => multipleMeshShader = evt.newValue as Shader);
+                optionsPanel.Add(shaderField);
+
+                if (multipleMeshShader == null)
+                {
+                    optionsPanel.Add(new HelpBox("Asigna el shader VAT Multiple Mesh (Lit o Unlit) que usará el material combinado.", HelpBoxMessageType.Warning));
+                }
 
                 var nameField = new TextField("Nombre del resultado") { value = outputName };
                 nameField.RegisterValueChangedCallback(evt => outputName = evt.newValue);
@@ -84,19 +101,23 @@ namespace JaimeCamachoDev.Multitool.Animation
                 folderField.RegisterValueChangedCallback(evt => outputFolder = evt.newValue as DefaultAsset);
                 optionsPanel.Add(folderField);
 
-                var disableToggle = new Toggle("Desactivar las SkinnedMeshRenderer originales") { value = disableOriginalRenderers };
-                disableToggle.RegisterValueChangedCallback(evt => disableOriginalRenderers = evt.newValue);
-                optionsPanel.Add(disableToggle);
+                var removeToggle = new Toggle("Eliminar las instancias originales tras combinar") { value = removeOriginalsAfterCombine };
+                removeToggle.RegisterValueChangedCallback(evt => removeOriginalsAfterCombine = evt.newValue);
+                optionsPanel.Add(removeToggle);
 
                 contentContainer.Add(optionsPanel);
 
-                var combineButton = new MTUIActionButton("Combinar mallas", () =>
+                contentContainer.Add(BuildBoundsPanel());
+
+                bool canCombine = !anyGroupInvalid && multipleMeshShader != null;
+
+                var combineButton = new MTUIActionButton("Combinar instancias VAT", () =>
                 {
-                    Combine(rootObject, renderers, outputName, disableOriginalRenderers);
+                    CombineGroups(groups, multipleMeshShader, outputName, removeOriginalsAfterCombine);
                     RefreshContent();
                 });
                 combineButton.style.marginTop = 10;
-                combineButton.SetAvailable(renderers.Count > 1);
+                combineButton.SetAvailable(canCombine);
                 contentContainer.Add(combineButton);
             }
 
@@ -108,161 +129,249 @@ namespace JaimeCamachoDev.Multitool.Animation
             return root;
         }
 
-        private static void Combine(GameObject root, List<SkinnedMeshRenderer> sources, string meshName, bool disableOriginals)
+        private static VisualElement BuildBoundsPanel()
         {
-            CombineSkinnedMeshes(sources, meshName, out Mesh combinedMesh, out Transform[] combinedBones, out Material[] combinedMaterials, out Transform rootBone);
+            var panel = new MTUIPanel("Bounds") { style = { marginTop = 10 } };
+            panel.Add(new MTUIInfoLabel(
+                "Una malla combinada de una multitud puede moverse fuera de sus bounds automáticos (calculados en bind pose) cuando el shader VAT desplaza los vértices. Activa unos bounds personalizados que envuelvan toda la zona por la que se mueve la multitud."));
 
+            var customToggle = new Toggle("Usar bounds personalizados") { value = useCustomBounds, style = { marginTop = 4 } };
+            panel.Add(customToggle);
+
+            var boundsField = new BoundsField("Bounds") { value = new Bounds(customBoundsCenter, customBoundsSize), style = { marginTop = 4 } };
+            boundsField.SetEnabled(useCustomBounds);
+            boundsField.RegisterValueChangedCallback(evt =>
+            {
+                customBoundsCenter = evt.newValue.center;
+                customBoundsSize = evt.newValue.size;
+            });
+            panel.Add(boundsField);
+
+            customToggle.RegisterValueChangedCallback(evt =>
+            {
+                useCustomBounds = evt.newValue;
+                boundsField.SetEnabled(useCustomBounds);
+            });
+
+            return panel;
+        }
+
+        private class MeshInstance
+        {
+            public MeshFilter Filter;
+            public MeshRenderer Renderer;
+            public Material Material;
+        }
+
+        private static List<MeshInstance> CollectInstances(GameObject root)
+        {
+            var result = new List<MeshInstance>();
+
+            foreach (MeshFilter filter in root.GetComponentsInChildren<MeshFilter>())
+            {
+                if (filter == null || filter.sharedMesh == null || filter.sharedMesh.vertexCount == 0)
+                {
+                    continue;
+                }
+
+                MeshRenderer renderer = filter.GetComponent<MeshRenderer>();
+                Material material = renderer != null ? renderer.sharedMaterial : null;
+                if (renderer == null || material == null)
+                {
+                    continue;
+                }
+
+                result.Add(new MeshInstance { Filter = filter, Renderer = renderer, Material = material });
+            }
+
+            return result;
+        }
+
+        private static Dictionary<Material, List<MeshInstance>> GroupByMaterial(List<MeshInstance> instances)
+        {
+            var groups = new Dictionary<Material, List<MeshInstance>>();
+            foreach (MeshInstance instance in instances)
+            {
+                if (!groups.TryGetValue(instance.Material, out List<MeshInstance> list))
+                {
+                    list = new List<MeshInstance>();
+                    groups[instance.Material] = list;
+                }
+
+                list.Add(instance);
+            }
+
+            return groups;
+        }
+
+        private static void CombineGroups(Dictionary<Material, List<MeshInstance>> groups, Shader shader, string baseName, bool removeOriginals)
+        {
             string outputPath = outputFolder != null ? AssetDatabase.GetAssetPath(outputFolder) : DefaultOutputPath;
             if (!AssetDatabase.IsValidFolder(outputPath))
             {
                 Directory.CreateDirectory(outputPath);
             }
 
-            string safeName = string.IsNullOrWhiteSpace(meshName) ? "CombinedForVAT" : meshName;
-            string meshPath = AssetDatabase.GenerateUniqueAssetPath(Path.Combine(outputPath, safeName + ".asset").Replace("\\", "/"));
-            AssetDatabase.CreateAsset(combinedMesh, meshPath);
-            AssetDatabase.SaveAssets();
-            AssetDatabase.Refresh();
-            Mesh savedMesh = AssetDatabase.LoadAssetAtPath<Mesh>(meshPath);
-
             Undo.IncrementCurrentGroup();
             int undoGroup = Undo.GetCurrentGroup();
-            Undo.SetCurrentGroupName("Combine meshes for VAT");
+            Undo.SetCurrentGroupName("Combine VAT crowd");
 
-            var combinedObject = new GameObject(safeName);
-            Undo.RegisterCreatedObjectUndo(combinedObject, "Combine meshes for VAT");
-            combinedObject.transform.SetParent(root.transform, false);
+            int groupIndex = 0;
+            var createdObjects = new List<GameObject>();
 
-            SkinnedMeshRenderer combinedRenderer = combinedObject.AddComponent<SkinnedMeshRenderer>();
-            combinedRenderer.sharedMesh = savedMesh;
-            combinedRenderer.bones = combinedBones;
-            combinedRenderer.rootBone = rootBone;
-            combinedRenderer.sharedMaterials = combinedMaterials;
-
-            if (disableOriginals)
+            foreach (var kvp in groups)
             {
-                foreach (SkinnedMeshRenderer source in sources)
+                Material sourceMaterial = kvp.Key;
+                List<MeshInstance> instances = kvp.Value;
+
+                int vertexCount = instances[0].Filter.sharedMesh.vertexCount;
+                if (!instances.All(i => i.Filter.sharedMesh.vertexCount == vertexCount))
                 {
-                    Undo.RecordObject(source, "Disable original renderer");
-                    source.enabled = false;
+                    Debug.LogWarning($"VAT Combiner: el grupo de material '{(sourceMaterial != null ? sourceMaterial.name : "(sin material)")}' tiene mallas con número de vértices distinto, se ha omitido.");
+                    continue;
+                }
+
+                groupIndex++;
+                string groupName = groups.Count > 1 ? $"{baseName}_{groupIndex}" : baseName;
+
+                CombineInstance[] combineInstances = new CombineInstance[instances.Count];
+                var offsets = new List<Vector4>(instances.Count * vertexCount);
+                var rotations = new List<Vector4>(instances.Count * vertexCount);
+
+                for (int i = 0; i < instances.Count; i++)
+                {
+                    Transform instanceTransform = instances[i].Filter.transform;
+                    combineInstances[i] = new CombineInstance
+                    {
+                        mesh = instances[i].Filter.sharedMesh,
+                        transform = instanceTransform.localToWorldMatrix
+                    };
+
+                    Vector3 position = instanceTransform.position;
+                    Quaternion rotation = instanceTransform.rotation;
+                    Vector4 offset = new Vector4(position.x, position.y, position.z, 0f);
+                    Vector4 rotationVector = new Vector4(rotation.x, rotation.y, rotation.z, rotation.w);
+
+                    for (int v = 0; v < vertexCount; v++)
+                    {
+                        offsets.Add(offset);
+                        rotations.Add(rotationVector);
+                    }
+                }
+
+                var combinedMesh = new Mesh
+                {
+                    name = groupName + "_Mesh",
+                    indexFormat = offsets.Count > 65535 ? IndexFormat.UInt32 : IndexFormat.UInt16
+                };
+                combinedMesh.CombineMeshes(combineInstances, true, true);
+                combinedMesh.SetUVs(2, offsets);
+                combinedMesh.SetUVs(3, rotations);
+                combinedMesh.RecalculateBounds();
+                if (useCustomBounds)
+                {
+                    combinedMesh.bounds = new Bounds(customBoundsCenter, customBoundsSize);
+                }
+
+                var vatMaterial = new Material(shader) { name = groupName + "_Mat" };
+                CopyMatchingTextureProperties(sourceMaterial, vatMaterial);
+                CopyMatchingFloatProperties(sourceMaterial, vatMaterial);
+                if (vatMaterial.HasProperty("_NumberOfMeshes")) vatMaterial.SetFloat("_NumberOfMeshes", instances.Count);
+                if (vatMaterial.HasProperty("_TotalVertex")) vatMaterial.SetFloat("_TotalVertex", vertexCount);
+
+                string meshPath = AssetDatabase.GenerateUniqueAssetPath(Path.Combine(outputPath, combinedMesh.name + ".asset").Replace("\\", "/"));
+                AssetDatabase.CreateAsset(combinedMesh, meshPath);
+
+                string materialPath = AssetDatabase.GenerateUniqueAssetPath(Path.Combine(outputPath, vatMaterial.name + ".mat").Replace("\\", "/"));
+                AssetDatabase.CreateAsset(vatMaterial, materialPath);
+
+                AssetDatabase.SaveAssets();
+                AssetDatabase.Refresh();
+
+                Mesh savedMesh = AssetDatabase.LoadAssetAtPath<Mesh>(meshPath);
+                Material savedMaterial = AssetDatabase.LoadAssetAtPath<Material>(materialPath);
+
+                var combinedObject = new GameObject(groupName);
+                Undo.RegisterCreatedObjectUndo(combinedObject, "Combine VAT crowd");
+                combinedObject.AddComponent<MeshFilter>().sharedMesh = savedMesh;
+                combinedObject.AddComponent<MeshRenderer>().sharedMaterial = savedMaterial;
+                createdObjects.Add(combinedObject);
+
+                if (removeOriginals)
+                {
+                    foreach (MeshInstance instance in instances)
+                    {
+                        if (instance.Filter != null)
+                        {
+                            Undo.DestroyObjectImmediate(instance.Filter.gameObject);
+                        }
+                    }
                 }
             }
 
             Undo.CollapseUndoOperations(undoGroup);
 
-            Selection.activeGameObject = combinedObject;
-            Debug.Log($"VAT Combiner: {sources.Count} mallas combinadas en '{combinedObject.name}' ({savedMesh.vertexCount} vértices).");
+            if (createdObjects.Count > 0)
+            {
+                Selection.objects = createdObjects.ToArray();
+            }
+
+            Debug.Log($"VAT Combiner: {createdObjects.Count} grupo(s) combinado(s) en '{outputPath}'.");
         }
 
-        private static void CombineSkinnedMeshes(
-            List<SkinnedMeshRenderer> sources, string meshName,
-            out Mesh combinedMesh, out Transform[] combinedBones, out Material[] combinedMaterials, out Transform rootBone)
+        private static void CopyMatchingTextureProperties(Material source, Material destination)
         {
-            var boneList = new List<Transform>();
-            var boneIndexMap = new Dictionary<Transform, int>();
-            var bindposesByBoneIndex = new Dictionary<int, Matrix4x4>();
-
-            int GetOrAddBoneIndex(Transform bone)
+            if (source == null || destination == null || source.shader == null)
             {
-                if (!boneIndexMap.TryGetValue(bone, out int index))
-                {
-                    index = boneList.Count;
-                    boneList.Add(bone);
-                    boneIndexMap[bone] = index;
-                }
-                return index;
+                return;
             }
 
-            var vertices = new List<Vector3>();
-            var normals = new List<Vector3>();
-            var tangents = new List<Vector4>();
-            var uvs = new List<Vector2>();
-            var boneWeights = new List<BoneWeight>();
-            var submeshTriangleLists = new List<List<int>>();
-            var materials = new List<Material>();
-
-            int vertexOffset = 0;
-
-            foreach (SkinnedMeshRenderer source in sources)
+            int propertyCount = source.shader.GetPropertyCount();
+            for (int i = 0; i < propertyCount; i++)
             {
-                Mesh mesh = source.sharedMesh;
-                Transform[] sourceBones = source.bones;
-                Matrix4x4[] sourceBindposes = mesh.bindposes;
-
-                var localToGlobalBoneIndex = new int[sourceBones.Length];
-                for (int i = 0; i < sourceBones.Length; i++)
+                if (source.shader.GetPropertyType(i) != ShaderPropertyType.Texture)
                 {
-                    int globalIndex = GetOrAddBoneIndex(sourceBones[i]);
-                    localToGlobalBoneIndex[i] = globalIndex;
-                    if (!bindposesByBoneIndex.ContainsKey(globalIndex) && i < sourceBindposes.Length)
-                    {
-                        bindposesByBoneIndex[globalIndex] = sourceBindposes[i];
-                    }
+                    continue;
                 }
 
-                int vertCount = mesh.vertexCount;
-                vertices.AddRange(mesh.vertices);
-                normals.AddRange(mesh.normals != null && mesh.normals.Length == vertCount ? mesh.normals : new Vector3[vertCount]);
-                tangents.AddRange(mesh.tangents != null && mesh.tangents.Length == vertCount ? mesh.tangents : new Vector4[vertCount]);
-                uvs.AddRange(mesh.uv != null && mesh.uv.Length == vertCount ? mesh.uv : new Vector2[vertCount]);
-
-                BoneWeight[] sourceWeights = mesh.boneWeights;
-                for (int i = 0; i < vertCount; i++)
+                string propertyName = source.shader.GetPropertyName(i);
+                if (!destination.HasProperty(propertyName))
                 {
-                    BoneWeight w = i < sourceWeights.Length ? sourceWeights[i] : default;
-                    w.boneIndex0 = localToGlobalBoneIndex[w.boneIndex0];
-                    w.boneIndex1 = localToGlobalBoneIndex[w.boneIndex1];
-                    w.boneIndex2 = localToGlobalBoneIndex[w.boneIndex2];
-                    w.boneIndex3 = localToGlobalBoneIndex[w.boneIndex3];
-                    boneWeights.Add(w);
+                    continue;
                 }
 
-                for (int s = 0; s < mesh.subMeshCount; s++)
+                Texture texture = source.GetTexture(propertyName);
+                if (texture != null)
                 {
-                    int[] tris = mesh.GetTriangles(s);
-                    var offsetTris = new List<int>(tris.Length);
-                    for (int i = 0; i < tris.Length; i++)
-                    {
-                        offsetTris.Add(tris[i] + vertexOffset);
-                    }
-                    submeshTriangleLists.Add(offsetTris);
+                    destination.SetTexture(propertyName, texture);
+                }
+            }
+        }
 
-                    Material mat = s < source.sharedMaterials.Length ? source.sharedMaterials[s] : null;
-                    materials.Add(mat);
+        private static void CopyMatchingFloatProperties(Material source, Material destination)
+        {
+            if (source == null || destination == null || source.shader == null)
+            {
+                return;
+            }
+
+            int propertyCount = source.shader.GetPropertyCount();
+            for (int i = 0; i < propertyCount; i++)
+            {
+                ShaderPropertyType type = source.shader.GetPropertyType(i);
+                if (type != ShaderPropertyType.Float && type != ShaderPropertyType.Range)
+                {
+                    continue;
                 }
 
-                vertexOffset += vertCount;
+                string propertyName = source.shader.GetPropertyName(i);
+                if (!destination.HasProperty(propertyName))
+                {
+                    continue;
+                }
+
+                destination.SetFloat(propertyName, source.GetFloat(propertyName));
             }
-
-            combinedMesh = new Mesh
-            {
-                name = meshName,
-                indexFormat = vertices.Count > 65535 ? IndexFormat.UInt32 : IndexFormat.UInt16
-            };
-            combinedMesh.SetVertices(vertices);
-            combinedMesh.SetNormals(normals);
-            combinedMesh.SetTangents(tangents);
-            combinedMesh.SetUVs(0, uvs);
-            combinedMesh.boneWeights = boneWeights.ToArray();
-
-            var bindposesArray = new Matrix4x4[boneList.Count];
-            for (int i = 0; i < boneList.Count; i++)
-            {
-                bindposesArray[i] = bindposesByBoneIndex.TryGetValue(i, out Matrix4x4 bp) ? bp : Matrix4x4.identity;
-            }
-            combinedMesh.bindposes = bindposesArray;
-
-            combinedMesh.subMeshCount = submeshTriangleLists.Count;
-            for (int s = 0; s < submeshTriangleLists.Count; s++)
-            {
-                combinedMesh.SetTriangles(submeshTriangleLists[s], s);
-            }
-
-            combinedMesh.RecalculateBounds();
-
-            combinedBones = boneList.ToArray();
-            combinedMaterials = materials.ToArray();
-            rootBone = sources[0].rootBone != null ? sources[0].rootBone : sources[0].transform;
         }
     }
 }
