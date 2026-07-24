@@ -13,9 +13,9 @@ namespace JaimeCamachoDev.Multitool.Animation
 {
     // Hornea Vertex Animation Textures (VAT) a partir de un clip y, para Single Mesh,
     // sustituye automáticamente el objeto animado de la escena por su versión estática
-    // con el shader y las texturas ya asignadas. Para Multiple Mesh, primero hay que
-    // preparar una única malla combinada y con un solo set de UVs usando VAT Combiner
-    // y VAT Painter — el paso de horneado final es el mismo para ambos modos.
+    // con el shader y las texturas ya asignadas. Para Multiple Mesh, este mismo horneado
+    // produce el VAT Single Mesh de partida de la multitud; después hay que prepararla con
+    // VAT UV Visual, VAT Painter y VAT Combiner (ver BuildMultiMeshPreparationPanel).
     public static class AnimationClipTextureBakerTool
     {
         private const string PackageName = "com.jaimecamachodev.unitymultitool";
@@ -37,6 +37,13 @@ namespace JaimeCamachoDev.Multitool.Animation
         private static GameObject targetObject;
         private static DefaultAsset outputFolder;
         private static bool replaceInScene = true;
+
+        // El shader VAT desplaza los vértices fuera de la malla estática original (bind
+        // pose), así que los bounds recalculados automáticamente no cubren la animación
+        // completa y Unity puede recortar (cull) el VAT cuando su centro sale de cámara.
+        private static bool useCustomBounds;
+        private static Vector3 customBoundsCenter = Vector3.zero;
+        private static Vector3 customBoundsSize = Vector3.one * 5f;
 
         public static VisualElement CreateGUI()
         {
@@ -171,11 +178,15 @@ namespace JaimeCamachoDev.Multitool.Animation
             singleUnlitField.RegisterValueChangedCallback(evt => { singleMeshUnlitShader = evt.newValue as Shader; onChanged(); });
             shadersFoldout.Add(singleUnlitField);
 
-            var multiLitField = new ObjectField("Multiple Mesh Lit") { objectType = typeof(Shader), allowSceneObjects = false, value = multiMeshLitShader };
+            shadersFoldout.Add(new HelpBox(
+                "Los shaders Multiple Mesh no se usan en este horneado (que siempre produce un VAT Single Mesh): se asignan más adelante, sobre la malla ya combinada, en VAT Combiner.",
+                HelpBoxMessageType.None) { style = { marginTop = 4 } });
+
+            var multiLitField = new ObjectField("Multiple Mesh Lit (referencia)") { objectType = typeof(Shader), allowSceneObjects = false, value = multiMeshLitShader };
             multiLitField.RegisterValueChangedCallback(evt => { multiMeshLitShader = evt.newValue as Shader; onChanged(); });
             shadersFoldout.Add(multiLitField);
 
-            var multiUnlitField = new ObjectField("Multiple Mesh Unlit") { objectType = typeof(Shader), allowSceneObjects = false, value = multiMeshUnlitShader };
+            var multiUnlitField = new ObjectField("Multiple Mesh Unlit (referencia)") { objectType = typeof(Shader), allowSceneObjects = false, value = multiMeshUnlitShader };
             multiUnlitField.RegisterValueChangedCallback(evt => { multiMeshUnlitShader = evt.newValue as Shader; onChanged(); });
             shadersFoldout.Add(multiUnlitField);
 
@@ -188,15 +199,15 @@ namespace JaimeCamachoDev.Multitool.Animation
         {
             var panel = new MTUIPanel("Preparación (Multiple Mesh)") { style = { marginTop = 10 } };
             panel.Add(new MTUIInfoLabel(
-                "Un VAT solo puede hornear una única malla. Si tu personaje está formado por varias SkinnedMeshRenderer (cuerpo, pelo, ropa...), combínalas primero en VAT Combiner y unifica sus texturas en un único atlas con VAT Painter. Cuando tengas una sola malla combinada, arrástrala abajo como objeto a hornear."));
+                "Para una multitud de personajes: primero hornea un VAT Single Mesh normal para un único personaje. Después usa VAT UV Visual para encuadrar las UV de sus clones dentro de un atlas compartido, VAT Painter para pintarlas en la escena y, por último, VAT Combiner para combinarlas en un único draw call. El horneado final de este panel es el mismo para ambos modos, así que solo lo necesitas para el VAT Single Mesh de partida."));
 
-            var buttonsRow = new VisualElement { style = { flexDirection = FlexDirection.Row, marginTop = 6 } };
+            var buttonsRow = new VisualElement { style = { flexDirection = FlexDirection.Row, marginTop = 6, flexWrap = Wrap.Wrap } };
 
-            var combinerButton = new MTUIActionButton("1. Abrir VAT Combiner", () =>
+            var uvVisualButton = new MTUIActionButton("1. Abrir VAT UV Visual", () =>
             {
-                MultitoolHub.OpenTool("VAT Combiner");
+                MultitoolHub.OpenTool("VAT UV Visual");
             }, MTUIColors.NeutralBackground, MTUIColors.NeutralBorder, MTUIColors.NeutralText);
-            buttonsRow.Add(combinerButton);
+            buttonsRow.Add(uvVisualButton);
 
             var painterButton = new MTUIActionButton("2. Abrir VAT Painter", () =>
             {
@@ -204,6 +215,13 @@ namespace JaimeCamachoDev.Multitool.Animation
             }, MTUIColors.NeutralBackground, MTUIColors.NeutralBorder, MTUIColors.NeutralText);
             painterButton.style.marginLeft = 6;
             buttonsRow.Add(painterButton);
+
+            var combinerButton = new MTUIActionButton("3. Abrir VAT Combiner", () =>
+            {
+                MultitoolHub.OpenTool("VAT Combiner");
+            }, MTUIColors.NeutralBackground, MTUIColors.NeutralBorder, MTUIColors.NeutralText);
+            combinerButton.style.marginLeft = 6;
+            buttonsRow.Add(combinerButton);
 
             panel.Add(buttonsRow);
 
@@ -214,7 +232,7 @@ namespace JaimeCamachoDev.Multitool.Animation
         {
             var panel = new MTUIPanel("Hornear VAT") { style = { marginTop = 10 } };
 
-            string targetLabel = meshMode == VatMeshMode.Single ? "Objeto animado" : "Malla combinada y pintada";
+            string targetLabel = meshMode == VatMeshMode.Single ? "Objeto animado" : "Objeto animado (personaje base de la multitud)";
             var targetField = new ObjectField(targetLabel) { objectType = typeof(GameObject), allowSceneObjects = true, value = targetObject };
             targetField.RegisterValueChangedCallback(evt =>
             {
@@ -253,6 +271,8 @@ namespace JaimeCamachoDev.Multitool.Animation
                 panel.Add(new HelpBox($"Si no se asigna carpeta se usará '{DefaultOutputPath}'.", HelpBoxMessageType.Info));
             }
 
+            panel.Add(BuildBoundsPanel(skin));
+
             bool isSceneInstance = targetObject != null && !EditorUtility.IsPersistent(targetObject);
             var replaceToggle = new Toggle("Reemplazar el objeto animado en la escena automáticamente") { value = replaceInScene, style = { marginTop = 6 } };
             replaceToggle.SetEnabled(isSceneInstance);
@@ -286,21 +306,61 @@ namespace JaimeCamachoDev.Multitool.Animation
             return panel;
         }
 
+        private static VisualElement BuildBoundsPanel(SkinnedMeshRenderer skin)
+        {
+            var panel = new MTUIPanel("Bounds") { style = { marginTop = 6 } };
+            panel.Add(new MTUIInfoLabel(
+                "El shader VAT desplaza los vértices fuera de la malla estática original, así que los bounds automáticos pueden no cubrir toda la animación y Unity puede recortar el objeto al salir de cámara. Activa unos bounds personalizados que envuelvan el recorrido completo."));
+
+            var customToggle = new Toggle("Usar bounds personalizados") { value = useCustomBounds, style = { marginTop = 4 } };
+            panel.Add(customToggle);
+
+            var boundsField = new BoundsField("Bounds") { value = new Bounds(customBoundsCenter, customBoundsSize), style = { marginTop = 4 } };
+            boundsField.SetEnabled(useCustomBounds);
+            boundsField.RegisterValueChangedCallback(evt =>
+            {
+                customBoundsCenter = evt.newValue.center;
+                customBoundsSize = evt.newValue.size;
+            });
+            panel.Add(boundsField);
+
+            var autoFitButton = new MTUIActionButton("Ajustar desde la malla del personaje (x2)", () =>
+            {
+                if (skin != null && skin.sharedMesh != null)
+                {
+                    Bounds source = skin.sharedMesh.bounds;
+                    customBoundsCenter = source.center;
+                    customBoundsSize = Vector3.Max(source.size * 2f, Vector3.one * 0.1f);
+                    boundsField.SetValueWithoutNotify(new Bounds(customBoundsCenter, customBoundsSize));
+                }
+            }, MTUIColors.NeutralBackground, MTUIColors.NeutralBorder, MTUIColors.NeutralText);
+            autoFitButton.style.marginTop = 4;
+            autoFitButton.SetAvailable(skin != null && skin.sharedMesh != null);
+            panel.Add(autoFitButton);
+
+            customToggle.RegisterValueChangedCallback(evt =>
+            {
+                useCustomBounds = evt.newValue;
+                boundsField.SetEnabled(useCustomBounds);
+            });
+
+            return panel;
+        }
+
+        // El horneado siempre produce un VAT Single Mesh: incluso para preparar una
+        // multitud (Multiple Mesh), el paso de horneado en sí solo puede muestrear una
+        // SkinnedMeshRenderer a la vez. El shader VAT Multiple Mesh solo se asigna después,
+        // sobre la malla ya combinada, desde VAT Combiner. El modo Multiple aquí únicamente
+        // desbloquea el panel de preparación (VAT UV Visual / VAT Painter / VAT Combiner).
         private static Shader GetActiveShader()
         {
-            if (meshMode == VatMeshMode.Single)
-            {
-                return lighting == VatLighting.Lit ? singleMeshLitShader : singleMeshUnlitShader;
-            }
-
-            return lighting == VatLighting.Lit ? multiMeshLitShader : multiMeshUnlitShader;
+            return lighting == VatLighting.Lit ? singleMeshLitShader : singleMeshUnlitShader;
         }
 
         private static string GetActiveShaderLabel()
         {
-            string meshLabel = meshMode == VatMeshMode.Single ? "Single Mesh" : "Multiple Mesh";
             string lightLabel = lighting == VatLighting.Lit ? "Lit" : "Unlit";
-            return $"{meshLabel} {lightLabel}";
+            return $"Single Mesh {lightLabel}";
         }
 
         private static ComputeShader ResolveComputeShader()
@@ -555,6 +615,11 @@ namespace JaimeCamachoDev.Multitool.Animation
             baked.SetUVs(1, vatUv);
 
             baked.RecalculateBounds();
+            if (useCustomBounds)
+            {
+                baked.bounds = new Bounds(customBoundsCenter, customBoundsSize);
+            }
+
             return baked;
         }
 

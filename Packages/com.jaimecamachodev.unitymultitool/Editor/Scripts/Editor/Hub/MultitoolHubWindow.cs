@@ -115,8 +115,9 @@ namespace JaimeCamachoDev.Multitool
                 "Transfer bone weight",
                 "Alembic to VAT",
                 "VAT Baker",
-                "VAT Combiner",
-                "VAT Painter"
+                "VAT UV Visual",
+                "VAT Painter",
+                "VAT Combiner"
             };
 
             categoryTools[Category.Texturas] = new List<string>
@@ -164,8 +165,9 @@ namespace JaimeCamachoDev.Multitool
             toolDescriptions["Transfer bone weight"] = "Transfiere pesos de hueso entre mallas con distinta topologa.";
             toolDescriptions["Alembic to VAT"] = "Convierte una secuencia Alembic en texturas VAT listas para shader y prefab.";
             toolDescriptions["VAT Baker"] = "Hornea texturas VAT desde un Animator y sustituye el objeto animado por su versión estática con el shader ya asignado.";
-            toolDescriptions["VAT Combiner"] = "Combina varias SkinnedMeshRenderer de un mismo personaje en una única malla lista para hornear VAT.";
-            toolDescriptions["VAT Painter"] = "Unifica los materiales de una malla combinada en un único atlas antes de hornear VAT.";
+            toolDescriptions["VAT UV Visual"] = "Empaqueta texturas en un atlas y reencuadra visualmente las UV de mallas clonadas para que compartan un mismo material VAT.";
+            toolDescriptions["VAT Painter"] = "Pinta con un pincel, en la escena, instancias VAT preparadas sobre una superficie con MeshCollider.";
+            toolDescriptions["VAT Combiner"] = "Combina en un único draw call todas las instancias VAT pintadas que compartan material, horneando su posición y rotación en la malla.";
 
             toolDescriptions["Convert Asset to Image"] = "Convierte assets de texturas en imágenes y viceversa.";
             toolDescriptions["Split texture into channels"] = "Extrae canales RGBA independientes utilizando ffmpeg.";
@@ -201,8 +203,9 @@ namespace JaimeCamachoDev.Multitool
             toolDrawers["Transfer bone weight"] = BoneWeightTransferTool.DrawTool;
             toolDrawers["Alembic to VAT"] = AlembicToVatTool.DrawTool;
             toolBuilders["VAT Baker"] = AnimationClipTextureBakerTool.CreateGUI;
-            toolBuilders["VAT Combiner"] = VATCombinerTool.CreateGUI;
+            toolBuilders["VAT UV Visual"] = VATUVVisualTool.CreateGUI;
             toolBuilders["VAT Painter"] = VATPainterTool.CreateGUI;
+            toolBuilders["VAT Combiner"] = VATCombinerTool.CreateGUI;
 
             toolDrawers["Lightmap checker"] = LightmapCheckerTool.DrawTool;
             toolDrawers["Renamer"] = RenameTool.DrawTool;
