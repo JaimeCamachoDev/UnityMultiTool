@@ -438,11 +438,27 @@ namespace JaimeCamachoDev.Multitool.Animation
             int undoGroup = Undo.GetCurrentGroup();
             Undo.SetCurrentGroupName("Bake VAT");
 
+            // BakeMesh() bakes vertices relative to the SkinnedMeshRenderer's own transform,
+            // not the dragged target's transform. FBX rigs commonly carry a rotation offset
+            // (e.g. a -90 X correction) on the mesh node that differs from the target/root
+            // node, so the new object must match skin.transform's world transform, not
+            // target.transform's, or it ends up rotated/mispositioned relative to the animation.
+            Transform skinTransform = skin.transform;
+            Vector3 skinWorldPosition = skinTransform.position;
+            Quaternion skinWorldRotation = skinTransform.rotation;
+            Vector3 skinWorldScale = skinTransform.lossyScale;
+
             GameObject vatObject = new GameObject(target.name + "_VAT");
             Undo.RegisterCreatedObjectUndo(vatObject, "Bake VAT");
             vatObject.transform.SetParent(target.transform.parent, false);
-            vatObject.transform.SetLocalPositionAndRotation(target.transform.localPosition, target.transform.localRotation);
-            vatObject.transform.localScale = target.transform.localScale;
+            vatObject.transform.SetPositionAndRotation(skinWorldPosition, skinWorldRotation);
+
+            Transform vatParent = vatObject.transform.parent;
+            Vector3 parentLossyScale = vatParent != null ? vatParent.lossyScale : Vector3.one;
+            vatObject.transform.localScale = new Vector3(
+                parentLossyScale.x != 0f ? skinWorldScale.x / parentLossyScale.x : skinWorldScale.x,
+                parentLossyScale.y != 0f ? skinWorldScale.y / parentLossyScale.y : skinWorldScale.y,
+                parentLossyScale.z != 0f ? skinWorldScale.z / parentLossyScale.z : skinWorldScale.z);
 
             MeshFilter meshFilter = vatObject.AddComponent<MeshFilter>();
             meshFilter.sharedMesh = finalMesh;
