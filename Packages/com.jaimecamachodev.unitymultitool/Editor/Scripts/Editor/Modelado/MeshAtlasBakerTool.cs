@@ -973,23 +973,23 @@ namespace JaimeCamachoDev.Multitool.Modeling
                 return;
             }
 
-            int previousActiveId = -1;
+            EntityId? previousActiveId = null;
             if (customUvPreviewActiveIndex >= 0 && customUvPreviewActiveIndex < customUvPreviewEntries.Count)
             {
                 CustomUvPreviewEntry previousActive = customUvPreviewEntries[customUvPreviewActiveIndex];
                 if (previousActive != null && previousActive.Renderer != null)
                 {
-                    previousActiveId = previousActive.Renderer.GetInstanceID();
+                    previousActiveId = previousActive.Renderer.GetEntityId();
                 }
             }
 
-            Dictionary<int, CustomUvPreviewEntry> existingEntries = new Dictionary<int, CustomUvPreviewEntry>();
+            Dictionary<EntityId, CustomUvPreviewEntry> existingEntries = new Dictionary<EntityId, CustomUvPreviewEntry>();
             for (int i = 0; i < customUvPreviewEntries.Count; i++)
             {
                 CustomUvPreviewEntry entry = customUvPreviewEntries[i];
                 if (entry != null && entry.Renderer != null)
                 {
-                    existingEntries[entry.Renderer.GetInstanceID()] = entry;
+                    existingEntries[entry.Renderer.GetEntityId()] = entry;
                 }
             }
 
@@ -1017,7 +1017,7 @@ namespace JaimeCamachoDev.Multitool.Modeling
                     continue;
                 }
 
-                int rendererId = renderer.GetInstanceID();
+                EntityId rendererId = renderer.GetEntityId();
                 CustomUvPreviewEntry entry;
                 if (existingEntries.TryGetValue(rendererId, out entry))
                 {
@@ -1069,12 +1069,12 @@ namespace JaimeCamachoDev.Multitool.Modeling
                 return;
             }
 
-            if (previousActiveId != -1)
+            if (previousActiveId.HasValue)
             {
                 for (int i = 0; i < customUvPreviewEntries.Count; i++)
                 {
                     CustomUvPreviewEntry entry = customUvPreviewEntries[i];
-                    if (entry != null && entry.Renderer != null && entry.Renderer.GetInstanceID() == previousActiveId)
+                    if (entry != null && entry.Renderer != null && entry.Renderer.GetEntityId() == previousActiveId.Value)
                     {
                         SetActiveCustomUvPreviewIndex(i);
                         return;
@@ -1601,7 +1601,7 @@ namespace JaimeCamachoDev.Multitool.Modeling
             }
 
             SelectionContext context = new SelectionContext(targetRenderer, targetFilter);
-            HashSet<int> processed = new HashSet<int>();
+            HashSet<EntityId> processed = new HashSet<EntityId>();
             bool skippedForUv = false;
 
             foreach (GameObject root in Selection.gameObjects)
@@ -1619,7 +1619,7 @@ namespace JaimeCamachoDev.Multitool.Modeling
                         continue;
                     }
 
-                    if (!processed.Add(renderer.GetInstanceID()))
+                    if (!processed.Add(renderer.GetEntityId()))
                     {
                         continue;
                     }
@@ -1670,7 +1670,7 @@ namespace JaimeCamachoDev.Multitool.Modeling
                 SkinnedMeshRenderer[] skinnedRenderers = root.GetComponentsInChildren<SkinnedMeshRenderer>(true);
                 foreach (SkinnedMeshRenderer skinnedRenderer in skinnedRenderers)
                 {
-                    if (skinnedRenderer == null || !processed.Add(skinnedRenderer.GetInstanceID()))
+                    if (skinnedRenderer == null || !processed.Add(skinnedRenderer.GetEntityId()))
                     {
                         continue;
                     }

@@ -23,7 +23,7 @@ namespace JaimeCamachoDev.Multitool.Modeling
         private static bool saveMeshAsset = true;
         private static string outputMeshName = "CombinedMesh";
         private static DefaultAsset outputFolder;
-        private static readonly HashSet<int> rendererIds = new HashSet<int>();
+        private static readonly HashSet<EntityId> rendererIds = new HashSet<EntityId>();
         private static bool showSelectionInsights = true;
         private static bool showAdvancedSettings;
         private static readonly List<string> reusableBuffer = new List<string>();
@@ -267,7 +267,7 @@ namespace JaimeCamachoDev.Multitool.Modeling
 
                 foreach (Renderer renderer in candidates)
                 {
-                    if (renderer == null || rendererIds.Contains(renderer.GetInstanceID()))
+                    if (renderer == null || rendererIds.Contains(renderer.GetEntityId()))
                     {
                         continue;
                     }
@@ -317,7 +317,7 @@ namespace JaimeCamachoDev.Multitool.Modeling
                     }
 
                     diagnostics.renderers.Add(renderer);
-                    rendererIds.Add(renderer.GetInstanceID());
+                    rendererIds.Add(renderer.GetEntityId());
                 }
             }
 
