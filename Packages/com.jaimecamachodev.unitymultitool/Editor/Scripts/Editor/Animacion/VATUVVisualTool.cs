@@ -275,20 +275,19 @@ namespace JaimeCamachoDev.Multitool.Animation
             container.Add(canvasContainer);
 
             var actionsRow = new VisualElement { style = { flexDirection = FlexDirection.Row, marginTop = 6 } };
-            var applyButton = new MTUIActionButton("Aplicar UV a la malla", () =>
+            var applyButton = new MTUIActionButton("Aplicar UV a todas las mallas", () =>
             {
-                ApplyActiveTransform();
+                ApplyAllTransforms();
                 refresh();
             });
-            var restoreButton = new MTUIActionButton("Restaurar UV originales", () =>
+            var restoreButton = new MTUIActionButton("Restaurar UV originales (activa)", () =>
             {
                 RestoreActiveToOriginal();
                 refresh();
             }, MTUIColors.NeutralBackground, MTUIColors.NeutralBorder, MTUIColors.NeutralText);
             restoreButton.style.marginLeft = 6;
-            bool hasActive = GetActiveEntry() != null;
-            applyButton.SetAvailable(hasActive);
-            restoreButton.SetAvailable(hasActive);
+            applyButton.SetAvailable(targets.Count > 0);
+            restoreButton.SetAvailable(GetActiveEntry() != null);
             actionsRow.Add(applyButton);
             actionsRow.Add(restoreButton);
             actionsRow.Add(new VisualElement { style = { flexGrow = 1 } });
@@ -529,6 +528,12 @@ namespace JaimeCamachoDev.Multitool.Animation
 
             var containerGO = new GameObject(displayName + "_VATClones");
             Undo.RegisterCreatedObjectUndo(containerGO, "Generar clones VAT UV Visual");
+
+            // Sin esto los clones aparecían en el origen del mundo (0,0,0) en vez de junto al
+            // original, ya que un GameObject nuevo siempre nace con el transform por defecto.
+            Transform sourceTransform = cloneSourceObject.transform;
+            containerGO.transform.SetPositionAndRotation(sourceTransform.position, sourceTransform.rotation);
+            containerGO.transform.localScale = sourceTransform.lossyScale;
 
             for (int i = 0; i < count; i++)
             {
@@ -845,47 +850,76 @@ namespace JaimeCamachoDev.Multitool.Animation
             entry.OwnsMesh = true;
         }
 
-        private static void ApplyActiveTransform()
+        // Antes aplicaba solo la entrada activa (la seleccionada en la leyenda), así que al
+        // colocar el gizmo de 4 clones y pulsar "Aplicar" una sola vez, solo el clon
+        // seleccionado en ese momento recibía el cambio — el resto se quedaba con su UV
+        // original. Ahora aplica la transformación pendiente de CADA malla objetivo (cada una
+        // conserva su propio TransformPosition/Scale/Rotation aunque cambies de selección),
+        // así un único clic aplica y guarda todos los clones a la vez.
+        private static void ApplyAllTransforms()
         {
-            UvTargetEntry entry = GetActiveEntry();
-            if (entry == null)
+            if (targets.Count == 0)
             {
-                SetStatus("Selecciona una malla válida antes de aplicar cambios.", HelpBoxMessageType.Warning);
+                SetStatus("No hay mallas objetivo para aplicar.", HelpBoxMessageType.Warning);
                 return;
             }
 
-            EnsureEditableMesh(entry);
-            Mesh mesh = entry.Mesh;
-            if (mesh == null || entry.Uvs == null || entry.Uvs.Length == 0)
+            int appliedCount = 0;
+            string lastFolder = null;
+
+            foreach (UvTargetEntry entry in targets)
             {
-                SetStatus("La malla activa no contiene coordenadas UV para modificar.", HelpBoxMessageType.Warning);
-                return;
+                if (entry == null)
+                {
+                    continue;
+                }
+
+                EnsureEditableMesh(entry);
+                Mesh mesh = entry.Mesh;
+                if (mesh == null || entry.Uvs == null || entry.Uvs.Length == 0)
+                {
+                    continue;
+                }
+
+                Matrix4x4 transformMatrix = Matrix4x4.TRS(entry.TransformPosition, Quaternion.Euler(0f, 0f, entry.TransformRotation), new Vector3(entry.TransformScale.x, entry.TransformScale.y, 1f));
+                Vector2[] transformed = new Vector2[entry.Uvs.Length];
+                for (int i = 0; i < entry.Uvs.Length; i++)
+                {
+                    Vector3 result = transformMatrix.MultiplyPoint3x4(new Vector3(entry.Uvs[i].x, entry.Uvs[i].y, 0f));
+                    transformed[i] = new Vector2(result.x, result.y);
+                }
+
+                Undo.RecordObject(mesh, "Aplicar transformación UV");
+                mesh.uv = transformed;
+                EditorUtility.SetDirty(mesh);
+
+                entry.Uvs = (Vector2[])transformed.Clone();
+                entry.TransformPosition = Vector2.zero;
+                entry.TransformScale = Vector2.one;
+                entry.TransformRotation = 0f;
+
+                string assetPath = PersistEntryMeshAsset(entry);
+                if (!string.IsNullOrEmpty(assetPath))
+                {
+                    lastFolder = Path.GetDirectoryName(assetPath);
+                }
+
+                appliedCount++;
             }
 
-            Matrix4x4 transformMatrix = Matrix4x4.TRS(entry.TransformPosition, Quaternion.Euler(0f, 0f, entry.TransformRotation), new Vector3(entry.TransformScale.x, entry.TransformScale.y, 1f));
-            Vector2[] transformed = new Vector2[entry.Uvs.Length];
-            for (int i = 0; i < entry.Uvs.Length; i++)
-            {
-                Vector3 result = transformMatrix.MultiplyPoint3x4(new Vector3(entry.Uvs[i].x, entry.Uvs[i].y, 0f));
-                transformed[i] = new Vector2(result.x, result.y);
-            }
-
-            Undo.RecordObject(mesh, "Aplicar transformación UV");
-            mesh.uv = transformed;
-            EditorUtility.SetDirty(mesh);
-
-            entry.Uvs = (Vector2[])transformed.Clone();
-            entry.TransformPosition = Vector2.zero;
-            entry.TransformScale = Vector2.one;
-            entry.TransformRotation = 0f;
             isDragging = false;
             dragEntryIndex = -1;
 
-            string assetPath = PersistEntryMeshAsset(entry);
+            if (appliedCount == 0)
+            {
+                SetStatus("Ninguna malla objetivo tenía coordenadas UV válidas para aplicar.", HelpBoxMessageType.Warning);
+                return;
+            }
+
             SetStatus(
-                string.IsNullOrEmpty(assetPath)
-                    ? $"UV aplicadas correctamente a '{entry.DisplayName}'."
-                    : $"UV aplicadas y malla guardada en '{assetPath}'.",
+                string.IsNullOrEmpty(lastFolder)
+                    ? $"UV aplicadas en {appliedCount} malla(s)."
+                    : $"UV aplicadas y guardadas en {appliedCount} malla(s), en '{lastFolder}'.",
                 HelpBoxMessageType.Info);
         }
 
