@@ -6,6 +6,7 @@ using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.UIElements;
+using MultitoolHub = JaimeCamachoDev.Multitool.MultitoolHubWindow;
 
 namespace JaimeCamachoDev.Multitool.Animation
 {
@@ -298,8 +299,24 @@ namespace JaimeCamachoDev.Multitool.Animation
             }, MTUIColors.NeutralBackground, MTUIColors.NeutralBorder, MTUIColors.NeutralText));
             container.Add(actionsRow);
 
+            container.Add(BuildNextStepPanel());
+
             RefreshTransform();
             RefreshLegend();
+        }
+
+        private static VisualElement BuildNextStepPanel()
+        {
+            var panel = new MTUIPanel("Siguiente paso") { style = { marginTop = 10 } };
+            panel.Add(new MTUIInfoLabel("Cuando hayas encuadrado las UV de todos tus clones, continúa en VAT Painter para pintarlos en la escena."));
+
+            var nextButton = new MTUIActionButton("Ir a VAT Painter", () =>
+            {
+                MultitoolHub.OpenTool("VAT Painter");
+            }, MTUIColors.NeutralBackground, MTUIColors.NeutralBorder, MTUIColors.NeutralText);
+            panel.Add(nextButton);
+
+            return panel;
         }
 
         private static void RefreshStatusBox(VisualElement container)
@@ -864,7 +881,45 @@ namespace JaimeCamachoDev.Multitool.Animation
             isDragging = false;
             dragEntryIndex = -1;
 
-            SetStatus($"UV aplicadas correctamente a '{entry.DisplayName}'.", HelpBoxMessageType.Info);
+            string assetPath = PersistEntryMeshAsset(entry);
+            SetStatus(
+                string.IsNullOrEmpty(assetPath)
+                    ? $"UV aplicadas correctamente a '{entry.DisplayName}'."
+                    : $"UV aplicadas y malla guardada en '{assetPath}'.",
+                HelpBoxMessageType.Info);
+        }
+
+        // Antes de esto, el mesh editado solo vivía en memoria/embebido en la escena
+        // (Instantiate sin guardar). Al aplicar UV se convierte en un asset real dentro de
+        // la carpeta de destino para que quede listo para VAT Painter/VAT Combiner; las
+        // siguientes aplicaciones sobre el mismo entry solo re-guardan el asset existente.
+        private static string PersistEntryMeshAsset(UvTargetEntry entry)
+        {
+            Mesh mesh = entry.Mesh;
+            if (mesh == null)
+            {
+                return null;
+            }
+
+            string existingPath = AssetDatabase.GetAssetPath(mesh);
+            if (!string.IsNullOrEmpty(existingPath))
+            {
+                AssetDatabase.SaveAssets();
+                return existingPath;
+            }
+
+            string outputPath = atlasOutputFolder != null ? AssetDatabase.GetAssetPath(atlasOutputFolder) : DefaultOutputPath;
+            if (!AssetDatabase.IsValidFolder(outputPath))
+            {
+                Directory.CreateDirectory(outputPath);
+            }
+
+            string assetPath = AssetDatabase.GenerateUniqueAssetPath(Path.Combine(outputPath, mesh.name + ".asset").Replace("\\", "/"));
+            AssetDatabase.CreateAsset(mesh, assetPath);
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+
+            return assetPath;
         }
 
         private static void RestoreActiveToOriginal()
@@ -895,6 +950,14 @@ namespace JaimeCamachoDev.Multitool.Animation
             entry.TransformRotation = 0f;
             isDragging = false;
             dragEntryIndex = -1;
+
+            // Si ya se había guardado como asset, se re-guarda para no dejarlo desincronizado
+            // con las UV restauradas; si todavía no existía como asset, no se crea uno nuevo
+            // aquí (solo "Aplicar UV a la malla" genera el asset por primera vez).
+            if (!string.IsNullOrEmpty(AssetDatabase.GetAssetPath(mesh)))
+            {
+                AssetDatabase.SaveAssets();
+            }
 
             SetStatus($"UV originales restauradas en '{entry.DisplayName}'.", HelpBoxMessageType.Info);
         }
