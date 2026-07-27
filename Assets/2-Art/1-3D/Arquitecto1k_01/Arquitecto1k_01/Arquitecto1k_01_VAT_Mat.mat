@@ -21,7 +21,7 @@ Material:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_Name: Arquitecto1k_01_VAT_Mat
-  m_Shader: {fileID: -6465566751694194690, guid: 38df235f50f0b6145b3d0ac3af83bbe0, type: 3}
+  m_Shader: {fileID: -6465566751694194690, guid: 273cb7cdd425ba34992cb15bd3821397, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords: []
