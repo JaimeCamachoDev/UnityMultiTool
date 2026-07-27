@@ -46,6 +46,7 @@ namespace JaimeCamachoDev.Multitool.Animation
         };
 
         private static readonly List<UvTargetEntry> targets = new List<UvTargetEntry>();
+        private static GameObject cloneSourceObject;
         private static int activeIndex = -1;
         private static string statusMessage = string.Empty;
         private static HelpBoxMessageType statusType = HelpBoxMessageType.Info;
@@ -319,22 +320,34 @@ namespace JaimeCamachoDev.Multitool.Animation
 
             foldout.Add(new HelpBox("Combina varias texturas de referencia (una por cada variación/clon) en una cuadrícula uniforme.", HelpBoxMessageType.None));
 
+            // El slider de conteo NO debe disparar un refresh() de página completa: eso
+            // destruiría y recrearía el propio slider a mitad de un arrastre continuo,
+            // dejando el arrastre "enganchado"/bloqueado. Solo se reconstruyen los campos
+            // de imagen (imageFieldsContainer), que sí pueden cambiar de tamaño.
+            var imageFieldsContainer = new VisualElement();
+
+            void RefreshImageFields()
+            {
+                imageFieldsContainer.Clear();
+                EnsureAtlasSourceListSize();
+                for (int i = 0; i < atlasSourceTextures.Count; i++)
+                {
+                    int index = i;
+                    var textureField = new ObjectField($"Imagen {i + 1}") { objectType = typeof(Texture2D), allowSceneObjects = false, value = atlasSourceTextures[index], style = { marginLeft = 15 } };
+                    textureField.RegisterValueChangedCallback(evt => atlasSourceTextures[index] = evt.newValue as Texture2D);
+                    imageFieldsContainer.Add(textureField);
+                }
+            }
+
             var countSlider = new SliderInt("Número de imágenes", 1, 16) { value = atlasImageCount };
             countSlider.RegisterValueChangedCallback(evt =>
             {
                 atlasImageCount = evt.newValue;
-                refresh();
+                RefreshImageFields();
             });
             foldout.Add(countSlider);
-
-            EnsureAtlasSourceListSize();
-            for (int i = 0; i < atlasSourceTextures.Count; i++)
-            {
-                int index = i;
-                var textureField = new ObjectField($"Imagen {i + 1}") { objectType = typeof(Texture2D), allowSceneObjects = false, value = atlasSourceTextures[index], style = { marginLeft = 15 } };
-                textureField.RegisterValueChangedCallback(evt => atlasSourceTextures[index] = evt.newValue as Texture2D);
-                foldout.Add(textureField);
-            }
+            foldout.Add(imageFieldsContainer);
+            RefreshImageFields();
 
             var resolutionChoices = new List<int>(atlasResolutionSizes);
             var resolutionField = new PopupField<int>("Resolución por imagen", resolutionChoices, atlasCellResolution, v => v.ToString(), v => v.ToString());
@@ -403,30 +416,31 @@ namespace JaimeCamachoDev.Multitool.Animation
         private static VisualElement BuildTargetListPanel(Action refresh)
         {
             var panel = new MTUIPanel("Mallas clonadas") { style = { marginTop = 6 } };
-            panel.Add(new MTUIInfoLabel("Añade aquí los clones (copias) de tu VAT Single Mesh que quieras encuadrar dentro del atlas. Cada uno debe ser un GameObject con MeshFilter."));
+            panel.Add(new MTUIInfoLabel(
+                "Arrastra aquí tu VAT Single Mesh original (el GameObject con SkinnedMeshRenderer o MeshFilter) y genera automáticamente tantos clones como imágenes tenga el atlas de arriba. Las UV0 se editan sobre los clones, nunca sobre el original."));
 
-            var addRow = new VisualElement { style = { flexDirection = FlexDirection.Row, marginTop = 4 } };
-            var addField = new ObjectField("Añadir malla") { objectType = typeof(MeshFilter), allowSceneObjects = true, style = { flexGrow = 1 } };
-            addField.RegisterValueChangedCallback(evt =>
+            var sourceField = new ObjectField("Malla original") { objectType = typeof(GameObject), allowSceneObjects = true, value = cloneSourceObject };
+            sourceField.RegisterValueChangedCallback(evt => cloneSourceObject = evt.newValue as GameObject);
+            panel.Add(sourceField);
+
+            EnsureAtlasSourceListSize();
+            var generateButton = new MTUIActionButton($"Generar {atlasImageCount} clon(es)", () =>
             {
-                if (evt.newValue is MeshFilter filter && filter != null)
-                {
-                    AddTarget(filter);
-                    addField.SetValueWithoutNotify(null);
-                    refresh();
-                }
+                GenerateClonesFromSource();
+                refresh();
             });
-            addRow.Add(addField);
-            panel.Add(addRow);
+            generateButton.style.marginTop = 4;
+            generateButton.SetAvailable(cloneSourceObject != null);
+            panel.Add(generateButton);
 
-            var addSelectionButton = new MTUIActionButton("Añadir selección", () =>
+            var addSelectionButton = new MTUIActionButton("Añadir selección (mallas ya existentes)", () =>
             {
                 foreach (GameObject go in Selection.gameObjects)
                 {
                     MeshFilter filter = go != null ? go.GetComponent<MeshFilter>() : null;
                     if (filter != null)
                     {
-                        AddTarget(filter);
+                        AddTarget(filter, ownsMesh: false);
                     }
                 }
                 refresh();
@@ -442,7 +456,93 @@ namespace JaimeCamachoDev.Multitool.Animation
             return panel;
         }
 
-        private static void AddTarget(MeshFilter filter)
+        private static bool TryResolveCloneSource(GameObject source, out Mesh mesh, out Material material, out string displayName)
+        {
+            mesh = null;
+            material = null;
+            displayName = null;
+
+            if (source == null)
+            {
+                return false;
+            }
+
+            SkinnedMeshRenderer skin = source.GetComponentInChildren<SkinnedMeshRenderer>();
+            if (skin != null && skin.sharedMesh != null)
+            {
+                mesh = skin.sharedMesh;
+                material = skin.sharedMaterial;
+                displayName = source.name;
+                return true;
+            }
+
+            MeshFilter filter = source.GetComponentInChildren<MeshFilter>();
+            if (filter != null && filter.sharedMesh != null)
+            {
+                mesh = filter.sharedMesh;
+                MeshRenderer renderer = filter.GetComponent<MeshRenderer>();
+                material = renderer != null ? renderer.sharedMaterial : null;
+                displayName = source.name;
+                return true;
+            }
+
+            return false;
+        }
+
+        private static void GenerateClonesFromSource()
+        {
+            if (!TryResolveCloneSource(cloneSourceObject, out Mesh sourceMesh, out Material sourceMaterial, out string displayName))
+            {
+                SetStatus("Selecciona un GameObject con SkinnedMeshRenderer o MeshFilter para generar los clones.", HelpBoxMessageType.Warning);
+                return;
+            }
+
+            if (sourceMesh.uv == null || sourceMesh.uv.Length == 0)
+            {
+                SetStatus($"'{displayName}' no tiene coordenadas UV0 que editar.", HelpBoxMessageType.Warning);
+                return;
+            }
+
+            EnsureAtlasSourceListSize();
+            int count = Mathf.Max(1, atlasImageCount);
+
+            Undo.IncrementCurrentGroup();
+            int undoGroup = Undo.GetCurrentGroup();
+            Undo.SetCurrentGroupName("Generar clones VAT UV Visual");
+
+            var containerGO = new GameObject(displayName + "_VATClones");
+            Undo.RegisterCreatedObjectUndo(containerGO, "Generar clones VAT UV Visual");
+
+            for (int i = 0; i < count; i++)
+            {
+                Mesh clone = Object.Instantiate(sourceMesh);
+                clone.name = $"{displayName}_Clone_{i + 1}_UVEdit";
+
+                var cloneGO = new GameObject($"{displayName}_Clone_{i + 1}");
+                Undo.RegisterCreatedObjectUndo(cloneGO, "Generar clones VAT UV Visual");
+                cloneGO.transform.SetParent(containerGO.transform, false);
+
+                MeshFilter cloneFilter = cloneGO.AddComponent<MeshFilter>();
+                cloneFilter.sharedMesh = clone;
+                MeshRenderer cloneRenderer = cloneGO.AddComponent<MeshRenderer>();
+                if (sourceMaterial != null)
+                {
+                    cloneRenderer.sharedMaterial = sourceMaterial;
+                }
+
+                // El mesh ya es una copia recién instanciada (no un asset compartido), así que
+                // se marca ownsMesh: true para no duplicarlo de nuevo la primera vez que se
+                // edite su UV.
+                AddTarget(cloneFilter, ownsMesh: true);
+            }
+
+            Undo.CollapseUndoOperations(undoGroup);
+
+            Selection.activeGameObject = containerGO;
+            SetStatus($"{count} clon(es) generado(s) a partir de '{displayName}'.", HelpBoxMessageType.Info);
+        }
+
+        private static void AddTarget(MeshFilter filter, bool ownsMesh)
         {
             Mesh mesh = filter.sharedMesh;
             if (mesh == null)
@@ -473,7 +573,8 @@ namespace JaimeCamachoDev.Multitool.Animation
                 Mesh = mesh,
                 InitialUvs = (Vector2[])uv.Clone(),
                 Uvs = (Vector2[])uv.Clone(),
-                Triangles = (int[])triangles.Clone()
+                Triangles = (int[])triangles.Clone(),
+                OwnsMesh = ownsMesh
             };
 
             Color baseColor = previewPalette[targets.Count % previewPalette.Length];
@@ -634,7 +735,11 @@ namespace JaimeCamachoDev.Multitool.Animation
         private static Texture2D CreateReadableCopy(Texture2D source)
         {
             RenderTexture previous = RenderTexture.active;
-            RenderTexture temporary = RenderTexture.GetTemporary(source.width, source.height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
+            // RenderTextureReadWrite.Linear fuerza el render texture a espacio lineal, lo que
+            // gamma-decodifica la textura de origen (normalmente sRGB) sin volver a codificarla
+            // al escribir: el resultado se veía visiblemente más claro/lavado que el original.
+            // Default respeta el espacio de color de la textura de origen y copia sin alterar el color.
+            RenderTexture temporary = RenderTexture.GetTemporary(source.width, source.height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Default);
 
             Graphics.Blit(source, temporary);
             RenderTexture.active = temporary;
