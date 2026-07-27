@@ -17,13 +17,33 @@ namespace JaimeCamachoDev.Multitool.Animation
     // el mismo material/atlas antes de pasar por VAT Painter y VAT Combiner.
     public static class VATUVVisualTool
     {
+        private enum AtlasLightingMode { Lit, Unlit }
+
+        private class AtlasChannel
+        {
+            public readonly string Label;
+            public readonly string FileSuffix;
+            public readonly List<Texture2D> SourceTextures = new List<Texture2D>();
+            public Texture2D Generated;
+            public Texture2D InUse;
+
+            public AtlasChannel(string label, string fileSuffix)
+            {
+                Label = label;
+                FileSuffix = fileSuffix;
+            }
+        }
+
         private static bool showAtlasBuilder = true;
+        private static AtlasLightingMode atlasLightingMode = AtlasLightingMode.Unlit;
         private static int atlasImageCount = 1;
-        private static readonly List<Texture2D> atlasSourceTextures = new List<Texture2D>();
+        private static readonly AtlasChannel baseChannel = new AtlasChannel("Color / Base Map", string.Empty);
+        // Solo hacen falta para Lit: el shader VAT Multiple/Single Lit también lee un normal
+        // map y un mask map (metallic/AO/smoothness) además del Base Map; Unlit no los usa.
+        private static readonly AtlasChannel normalChannel = new AtlasChannel("Normal Map", "_Normal");
+        private static readonly AtlasChannel maskChannel = new AtlasChannel("Mask Map (Metallic/AO/Smoothness)", "_MaskMap");
         private static readonly int[] atlasResolutionSizes = { 256, 512, 1024, 2048 };
         private static int atlasCellResolution = 1024;
-        private static Texture2D generatedAtlas;
-        private static Texture2D atlasTexture;
         private static string atlasOutputName = "VAT_UV_Atlas";
         private static DefaultAsset atlasOutputFolder;
         private const string DefaultOutputPath = "Assets/BakedAnimationTex";
@@ -116,9 +136,9 @@ namespace JaimeCamachoDev.Multitool.Animation
                 Rect previewRect = GUILayoutUtility.GetAspectRect(1f, GUILayout.ExpandWidth(true), GUILayout.MaxHeight(420f));
                 DrawPreviewBackground(previewRect);
 
-                if (atlasTexture != null && Event.current.type == EventType.Repaint)
+                if (baseChannel.InUse != null && Event.current.type == EventType.Repaint)
                 {
-                    GUI.DrawTexture(previewRect, atlasTexture, ScaleMode.ScaleToFit);
+                    GUI.DrawTexture(previewRect, baseChannel.InUse, ScaleMode.ScaleToFit);
                 }
 
                 DrawPreviewGrid(previewRect);
@@ -334,24 +354,60 @@ namespace JaimeCamachoDev.Multitool.Animation
             var foldout = new Foldout { text = "Atlas de referencia", value = showAtlasBuilder };
             foldout.RegisterValueChangedCallback(evt => showAtlasBuilder = evt.newValue);
 
-            foldout.Add(new HelpBox("Combina varias texturas de referencia (una por cada variación/clon) en una cuadrícula uniforme.", HelpBoxMessageType.None));
+            foldout.Add(new HelpBox(
+                "Combina varias texturas de referencia (una por cada variación/clon) en una cuadrícula uniforme. En Lit se generan además los atlas de Normal Map y Mask Map (metallic/AO/smoothness) que necesita el shader VAT Lit; en Unlit solo hace falta el de color.",
+                HelpBoxMessageType.None));
+
+            var lightingRow = new VisualElement { style = { flexDirection = FlexDirection.Row, marginTop = 4 } };
+            var lightingButtons = new List<(AtlasLightingMode mode, MTUIActionButton button)>();
+
+            void RefreshLightingColors()
+            {
+                foreach (var (mode, button) in lightingButtons)
+                {
+                    bool selected = mode == atlasLightingMode;
+                    button.SetColors(
+                        selected ? MTUIColors.BlueBackground : MTUIColors.NeutralBackground,
+                        selected ? MTUIColors.BlueBorder : MTUIColors.NeutralBorder,
+                        selected ? MTUIColors.BlueText : MTUIColors.NeutralText);
+                }
+            }
+
+            void AddLightingButton(string label, AtlasLightingMode mode)
+            {
+                var button = new MTUIActionButton(label, () =>
+                {
+                    atlasLightingMode = mode;
+                    refresh();
+                });
+                button.style.flexGrow = 1;
+                lightingButtons.Add((mode, button));
+                lightingRow.Add(button);
+            }
+
+            AddLightingButton("Lit", AtlasLightingMode.Lit);
+            AddLightingButton("Unlit", AtlasLightingMode.Unlit);
+            RefreshLightingColors();
+            foldout.Add(lightingRow);
 
             // El slider de conteo NO debe disparar un refresh() de página completa: eso
             // destruiría y recrearía el propio slider a mitad de un arrastre continuo,
             // dejando el arrastre "enganchado"/bloqueado. Solo se reconstruyen los campos
-            // de imagen (imageFieldsContainer), que sí pueden cambiar de tamaño.
-            var imageFieldsContainer = new VisualElement();
+            // de imagen de cada canal, que sí pueden cambiar de tamaño.
+            var channelFieldsContainer = new VisualElement { style = { marginTop = 4 } };
 
-            void RefreshImageFields()
+            void RefreshChannelFields()
             {
-                imageFieldsContainer.Clear();
-                EnsureAtlasSourceListSize();
-                for (int i = 0; i < atlasSourceTextures.Count; i++)
+                channelFieldsContainer.Clear();
+                EnsureChannelListSize(baseChannel);
+                AddChannelFields(channelFieldsContainer, baseChannel);
+
+                if (atlasLightingMode == AtlasLightingMode.Lit)
                 {
-                    int index = i;
-                    var textureField = new ObjectField($"Imagen {i + 1}") { objectType = typeof(Texture2D), allowSceneObjects = false, value = atlasSourceTextures[index], style = { marginLeft = 15 } };
-                    textureField.RegisterValueChangedCallback(evt => atlasSourceTextures[index] = evt.newValue as Texture2D);
-                    imageFieldsContainer.Add(textureField);
+                    EnsureChannelListSize(normalChannel);
+                    EnsureChannelListSize(maskChannel);
+                    AddChannelFields(channelFieldsContainer, normalChannel);
+                    AddChannelFields(channelFieldsContainer, maskChannel);
                 }
             }
 
@@ -359,11 +415,11 @@ namespace JaimeCamachoDev.Multitool.Animation
             countSlider.RegisterValueChangedCallback(evt =>
             {
                 atlasImageCount = evt.newValue;
-                RefreshImageFields();
+                RefreshChannelFields();
             });
             foldout.Add(countSlider);
-            foldout.Add(imageFieldsContainer);
-            RefreshImageFields();
+            foldout.Add(channelFieldsContainer);
+            RefreshChannelFields();
 
             var resolutionChoices = new List<int>(atlasResolutionSizes);
             var resolutionField = new PopupField<int>("Resolución por imagen", resolutionChoices, atlasCellResolution, v => v.ToString(), v => v.ToString());
@@ -379,51 +435,76 @@ namespace JaimeCamachoDev.Multitool.Animation
             foldout.Add(folderField);
 
             var buttonsRow = new VisualElement { style = { flexDirection = FlexDirection.Row, marginTop = 4 } };
-            buttonsRow.Add(new MTUIActionButton("Generar atlas", () =>
+            buttonsRow.Add(new MTUIActionButton("Generar atlas(es)", () =>
             {
-                GenerateAtlasTexture();
+                GenerateAllAtlases();
                 refresh();
             }));
 
-            var saveButton = new MTUIActionButton("Guardar como textura", () =>
+            var saveButton = new MTUIActionButton("Guardar como textura(s)", () =>
             {
-                SaveGeneratedAtlas();
+                SaveAllGeneratedAtlases();
                 refresh();
             }, MTUIColors.NeutralBackground, MTUIColors.NeutralBorder, MTUIColors.NeutralText);
             saveButton.style.marginLeft = 6;
-            saveButton.SetAvailable(generatedAtlas != null);
+            saveButton.SetAvailable(baseChannel.Generated != null);
             buttonsRow.Add(saveButton);
             foldout.Add(buttonsRow);
 
-            if (generatedAtlas != null)
+            AddChannelPreview(foldout, baseChannel);
+            if (atlasLightingMode == AtlasLightingMode.Lit)
             {
-                foldout.Add(new Image { image = generatedAtlas, scaleMode = ScaleMode.ScaleToFit, style = { height = 140, marginTop = 4 } });
-                foldout.Add(new Label($"Atlas generado: {generatedAtlas.width}x{generatedAtlas.height}") { style = { fontSize = 10 } });
+                AddChannelPreview(foldout, normalChannel);
+                AddChannelPreview(foldout, maskChannel);
             }
 
             panel.Add(foldout);
             return panel;
         }
 
+        private static void AddChannelFields(VisualElement container, AtlasChannel channel)
+        {
+            container.Add(new Label(channel.Label) { style = { unityFontStyleAndWeight = FontStyle.Bold, marginTop = 6 } });
+            for (int i = 0; i < channel.SourceTextures.Count; i++)
+            {
+                int index = i;
+                var textureField = new ObjectField($"Imagen {i + 1}") { objectType = typeof(Texture2D), allowSceneObjects = false, value = channel.SourceTextures[index], style = { marginLeft = 15 } };
+                textureField.RegisterValueChangedCallback(evt => channel.SourceTextures[index] = evt.newValue as Texture2D);
+                container.Add(textureField);
+            }
+        }
+
+        private static void AddChannelPreview(VisualElement container, AtlasChannel channel)
+        {
+            if (channel.Generated == null)
+            {
+                return;
+            }
+
+            container.Add(new Label(channel.Label) { style = { unityFontStyleAndWeight = FontStyle.Bold, marginTop = 4, fontSize = 10 } });
+            container.Add(new Image { image = channel.Generated, scaleMode = ScaleMode.ScaleToFit, style = { height = 140, marginTop = 2 } });
+            container.Add(new Label($"{channel.Generated.width}x{channel.Generated.height}") { style = { fontSize = 10 } });
+        }
+
         private static VisualElement BuildAtlasInUsePanel(Action refresh)
         {
             var panel = new MTUIPanel("Atlas en uso") { style = { marginTop = 6 } };
 
-            var atlasField = new ObjectField("Textura de referencia") { objectType = typeof(Texture2D), allowSceneObjects = false, value = atlasTexture };
+            var atlasField = new ObjectField("Textura de referencia (color)") { objectType = typeof(Texture2D), allowSceneObjects = false, value = baseChannel.InUse };
             atlasField.RegisterValueChangedCallback(evt =>
             {
-                atlasTexture = evt.newValue as Texture2D;
+                baseChannel.InUse = evt.newValue as Texture2D;
                 refresh();
             });
             panel.Add(atlasField);
 
-            if (atlasTexture == null)
+            if (baseChannel.InUse == null)
             {
                 panel.Add(new HelpBox("Genera un atlas arriba o asigna uno existente para usarlo de fondo en la vista previa.", HelpBoxMessageType.Info));
             }
             else
             {
-                panel.Add(new MTUIInfoLabel($"Dimensiones: {atlasTexture.width}x{atlasTexture.height}"));
+                panel.Add(new MTUIInfoLabel($"Dimensiones: {baseChannel.InUse.width}x{baseChannel.InUse.height}"));
             }
 
             return panel;
@@ -439,7 +520,7 @@ namespace JaimeCamachoDev.Multitool.Animation
             sourceField.RegisterValueChangedCallback(evt => cloneSourceObject = evt.newValue as GameObject);
             panel.Add(sourceField);
 
-            EnsureAtlasSourceListSize();
+            EnsureAtlasImageCountValid();
             var generateButton = new MTUIActionButton($"Generar {atlasImageCount} clon(es)", () =>
             {
                 GenerateClonesFromSource();
@@ -519,7 +600,7 @@ namespace JaimeCamachoDev.Multitool.Animation
                 return;
             }
 
-            EnsureAtlasSourceListSize();
+            EnsureAtlasImageCountValid();
             int count = Mathf.Max(1, atlasImageCount);
 
             Undo.IncrementCurrentGroup();
@@ -610,45 +691,82 @@ namespace JaimeCamachoDev.Multitool.Animation
             }
         }
 
-        private static void EnsureAtlasSourceListSize()
+        private static void EnsureAtlasImageCountValid()
         {
             if (atlasImageCount < 1)
             {
                 atlasImageCount = 1;
             }
+        }
 
-            while (atlasSourceTextures.Count < atlasImageCount)
+        private static void EnsureChannelListSize(AtlasChannel channel)
+        {
+            EnsureAtlasImageCountValid();
+
+            while (channel.SourceTextures.Count < atlasImageCount)
             {
-                atlasSourceTextures.Add(null);
+                channel.SourceTextures.Add(null);
             }
 
-            while (atlasSourceTextures.Count > atlasImageCount)
+            while (channel.SourceTextures.Count > atlasImageCount)
             {
-                atlasSourceTextures.RemoveAt(atlasSourceTextures.Count - 1);
+                channel.SourceTextures.RemoveAt(channel.SourceTextures.Count - 1);
             }
         }
 
-        private static void GenerateAtlasTexture()
+        // Genera siempre el atlas de color; en Lit genera también Normal y Mask Map, con la
+        // misma cuadrícula (mismo número de imágenes → mismas columnas/filas) para que el
+        // slot N de cada atlas corresponda al mismo clon en los tres.
+        private static void GenerateAllAtlases()
         {
-            EnsureAtlasSourceListSize();
-
-            if (atlasSourceTextures.Count == 0)
+            if (!GenerateAtlasForChannel(baseChannel))
             {
-                SetStatus("Asigna al menos una imagen para generar el atlas.", HelpBoxMessageType.Warning);
                 return;
             }
 
+            if (atlasLightingMode == AtlasLightingMode.Lit)
+            {
+                bool normalOk = GenerateAtlasForChannel(normalChannel);
+                if (!normalOk)
+                {
+                    return;
+                }
+
+                bool maskOk = GenerateAtlasForChannel(maskChannel);
+                if (!maskOk)
+                {
+                    return;
+                }
+
+                SetStatus($"Atlas generados correctamente ({baseChannel.Generated.width}x{baseChannel.Generated.height}): color, normal y mask map.", HelpBoxMessageType.Info);
+            }
+            else
+            {
+                SetStatus($"Atlas generado correctamente ({baseChannel.Generated.width}x{baseChannel.Generated.height}).", HelpBoxMessageType.Info);
+            }
+        }
+
+        private static bool GenerateAtlasForChannel(AtlasChannel channel)
+        {
+            EnsureChannelListSize(channel);
+
+            if (channel.SourceTextures.Count == 0)
+            {
+                SetStatus($"Asigna al menos una imagen en '{channel.Label}' para generar el atlas.", HelpBoxMessageType.Warning);
+                return false;
+            }
+
             var readableCopies = new List<Texture2D>();
-            var sources = new List<Texture2D>(atlasSourceTextures.Count);
+            var sources = new List<Texture2D>(channel.SourceTextures.Count);
 
             try
             {
-                foreach (Texture2D source in atlasSourceTextures)
+                foreach (Texture2D source in channel.SourceTextures)
                 {
                     if (source == null)
                     {
-                        SetStatus("Todos los espacios de imagen deben estar asignados antes de generar el atlas.", HelpBoxMessageType.Warning);
-                        return;
+                        SetStatus($"Todos los espacios de imagen de '{channel.Label}' deben estar asignados antes de generar el atlas.", HelpBoxMessageType.Warning);
+                        return false;
                     }
 
                     Texture2D readable = source;
@@ -667,9 +785,10 @@ namespace JaimeCamachoDev.Multitool.Animation
                 int atlasWidth = Mathf.Max(1, columns * cellResolution);
                 int atlasHeight = Mathf.Max(1, rows * cellResolution);
 
+                string safeName = string.IsNullOrWhiteSpace(atlasOutputName) ? "VAT_UV_Atlas" : atlasOutputName;
                 var atlas = new Texture2D(atlasWidth, atlasHeight, TextureFormat.RGBA32, false)
                 {
-                    name = atlasOutputName,
+                    name = safeName + channel.FileSuffix,
                     wrapMode = TextureWrapMode.Clamp,
                     filterMode = FilterMode.Bilinear,
                     hideFlags = HideFlags.HideAndDontSave
@@ -691,20 +810,20 @@ namespace JaimeCamachoDev.Multitool.Animation
 
                 atlas.Apply();
 
-                if (generatedAtlas != null)
+                if (channel.Generated != null)
                 {
-                    UnityEngine.Object.DestroyImmediate(generatedAtlas);
+                    UnityEngine.Object.DestroyImmediate(channel.Generated);
                 }
 
-                generatedAtlas = atlas;
-                atlasTexture = generatedAtlas;
-                SetStatus($"Atlas generado correctamente ({atlas.width}x{atlas.height}).", HelpBoxMessageType.Info);
+                channel.Generated = atlas;
+                channel.InUse = atlas;
+                return true;
             }
             finally
             {
                 foreach (Texture2D copy in readableCopies)
                 {
-                    if (copy != null && copy != generatedAtlas)
+                    if (copy != null && copy != channel.Generated)
                     {
                         UnityEngine.Object.DestroyImmediate(copy);
                     }
@@ -729,12 +848,45 @@ namespace JaimeCamachoDev.Multitool.Animation
             }
         }
 
-        private static void SaveGeneratedAtlas()
+        private static void SaveAllGeneratedAtlases()
         {
-            if (generatedAtlas == null)
+            if (baseChannel.Generated == null)
             {
-                SetStatus("No hay un atlas generado para guardar.", HelpBoxMessageType.Warning);
+                SetStatus("No hay ningún atlas generado para guardar.", HelpBoxMessageType.Warning);
                 return;
+            }
+
+            string basePath = SaveAtlasForChannel(baseChannel);
+            string normalPath = null;
+            string maskPath = null;
+
+            if (atlasLightingMode == AtlasLightingMode.Lit)
+            {
+                if (normalChannel.Generated != null)
+                {
+                    normalPath = SaveAtlasForChannel(normalChannel);
+                }
+
+                if (maskChannel.Generated != null)
+                {
+                    maskPath = SaveAtlasForChannel(maskChannel);
+                }
+            }
+
+            int savedCount = 1 + (normalPath != null ? 1 : 0) + (maskPath != null ? 1 : 0);
+            string folder = basePath != null ? Path.GetDirectoryName(basePath) : null;
+            SetStatus(
+                savedCount > 1
+                    ? $"{savedCount} atlas guardados en '{folder}'."
+                    : $"Atlas guardado en '{basePath}'.",
+                HelpBoxMessageType.Info);
+        }
+
+        private static string SaveAtlasForChannel(AtlasChannel channel)
+        {
+            if (channel.Generated == null)
+            {
+                return null;
             }
 
             string outputPath = atlasOutputFolder != null ? AssetDatabase.GetAssetPath(atlasOutputFolder) : DefaultOutputPath;
@@ -743,15 +895,14 @@ namespace JaimeCamachoDev.Multitool.Animation
                 Directory.CreateDirectory(outputPath);
             }
 
-            byte[] pngData = generatedAtlas.EncodeToPNG();
-            string safeName = string.IsNullOrWhiteSpace(atlasOutputName) ? "VAT_UV_Atlas" : atlasOutputName;
-            string assetPath = AssetDatabase.GenerateUniqueAssetPath(Path.Combine(outputPath, safeName + ".png").Replace("\\", "/"));
+            byte[] pngData = channel.Generated.EncodeToPNG();
+            string assetPath = AssetDatabase.GenerateUniqueAssetPath(Path.Combine(outputPath, channel.Generated.name + ".png").Replace("\\", "/"));
             File.WriteAllBytes(assetPath, pngData);
             AssetDatabase.ImportAsset(assetPath);
             AssetDatabase.Refresh();
 
-            atlasTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(assetPath);
-            SetStatus($"Atlas guardado en '{assetPath}'.", HelpBoxMessageType.Info);
+            channel.InUse = AssetDatabase.LoadAssetAtPath<Texture2D>(assetPath);
+            return assetPath;
         }
 
         private static Texture2D CreateReadableCopy(Texture2D source)
