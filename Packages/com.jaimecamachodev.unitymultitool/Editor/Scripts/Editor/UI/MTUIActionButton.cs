@@ -63,6 +63,12 @@ namespace JaimeCamachoDev.Multitool.UI
                 labelElement.style.color = textColor;
         }
 
+        public void SetLabel(string label)
+        {
+            if (labelElement != null)
+                labelElement.text = label;
+        }
+
         public void SetAvailable(bool available, string unavailableLabel = null)
         {
             base.SetEnabled(available);
