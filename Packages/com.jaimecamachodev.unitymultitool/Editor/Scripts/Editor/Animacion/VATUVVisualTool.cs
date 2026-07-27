@@ -515,7 +515,7 @@ namespace JaimeCamachoDev.Multitool.Animation
 
             for (int i = 0; i < count; i++)
             {
-                Mesh clone = Object.Instantiate(sourceMesh);
+                Mesh clone = UnityEngine.Object.Instantiate(sourceMesh);
                 clone.name = $"{displayName}_Clone_{i + 1}_UVEdit";
 
                 var cloneGO = new GameObject($"{displayName}_Clone_{i + 1}");
