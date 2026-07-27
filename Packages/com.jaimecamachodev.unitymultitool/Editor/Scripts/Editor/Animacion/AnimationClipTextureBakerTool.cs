@@ -58,6 +58,8 @@ namespace JaimeCamachoDev.Multitool.Animation
 
             void RefreshContent()
             {
+                EnsureDefaultShaders();
+
                 contentContainer.Clear();
                 contentContainer.Add(BuildModePanel(RefreshContent));
 
@@ -82,12 +84,60 @@ namespace JaimeCamachoDev.Multitool.Animation
                 }
             }
 
-            root.RegisterCallback<AttachToPanelEvent>(_ => Selection.selectionChanged += SyncFromSelection);
-            root.RegisterCallback<DetachFromPanelEvent>(_ => Selection.selectionChanged -= SyncFromSelection);
+            root.RegisterCallback<AttachToPanelEvent>(_ =>
+            {
+                Selection.selectionChanged += SyncFromSelection;
+                SceneView.duringSceneGui += DrawBoundsPreview;
+            });
+            root.RegisterCallback<DetachFromPanelEvent>(_ =>
+            {
+                Selection.selectionChanged -= SyncFromSelection;
+                SceneView.duringSceneGui -= DrawBoundsPreview;
+            });
 
             RefreshContent();
 
             return root;
+        }
+
+        // Previsualiza en la escena, mientras el panel está abierto, la caja de bounds
+        // personalizada antes de hornear, para que el usuario pueda ajustarla visualmente en
+        // vez de adivinar valores numéricos a ciegas.
+        private static void DrawBoundsPreview(SceneView sceneView)
+        {
+            if (!useCustomBounds)
+            {
+                return;
+            }
+
+            SkinnedMeshRenderer skin = targetObject != null ? targetObject.GetComponentInChildren<SkinnedMeshRenderer>() : null;
+            Transform reference = skin != null ? skin.transform : targetObject != null ? targetObject.transform : null;
+            if (reference == null)
+            {
+                return;
+            }
+
+            Matrix4x4 previousMatrix = Handles.matrix;
+            Color previousColor = Handles.color;
+
+            Handles.matrix = reference.localToWorldMatrix;
+            Handles.color = new Color(0.1f, 1f, 0.55f, 0.9f);
+            Handles.DrawWireCube(customBoundsCenter, customBoundsSize);
+
+            Handles.matrix = previousMatrix;
+            Handles.color = previousColor;
+        }
+
+        // Los 4 shaders VAT vienen empaquetados dentro del propio paquete: se autoasignan la
+        // primera vez que se necesitan para que el usuario no tenga que arrastrarlos a mano
+        // cada vez. Si el usuario los sustituye por una variante propia, esa elección se
+        // respeta (solo se autoasigna cuando el campo está vacío).
+        private static void EnsureDefaultShaders()
+        {
+            if (singleMeshLitShader == null) singleMeshLitShader = VATShaderLibrary.SingleMeshLit;
+            if (singleMeshUnlitShader == null) singleMeshUnlitShader = VATShaderLibrary.SingleMeshUnlit;
+            if (multiMeshLitShader == null) multiMeshLitShader = VATShaderLibrary.MultipleMeshLit;
+            if (multiMeshUnlitShader == null) multiMeshUnlitShader = VATShaderLibrary.MultipleMeshUnlit;
         }
 
         private static VisualElement BuildModePanel(System.Action onChanged)
@@ -321,8 +371,14 @@ namespace JaimeCamachoDev.Multitool.Animation
             {
                 customBoundsCenter = evt.newValue.center;
                 customBoundsSize = evt.newValue.size;
+                SceneView.RepaintAll();
             });
             panel.Add(boundsField);
+
+            if (useCustomBounds)
+            {
+                panel.Add(new MTUIInfoLabel("La caja verde en la vista de escena muestra estos bounds en tiempo real."));
+            }
 
             var autoFitButton = new MTUIActionButton("Ajustar desde la malla del personaje (x2)", () =>
             {
@@ -332,6 +388,7 @@ namespace JaimeCamachoDev.Multitool.Animation
                     customBoundsCenter = source.center;
                     customBoundsSize = Vector3.Max(source.size * 2f, Vector3.one * 0.1f);
                     boundsField.SetValueWithoutNotify(new Bounds(customBoundsCenter, customBoundsSize));
+                    SceneView.RepaintAll();
                 }
             }, MTUIColors.NeutralBackground, MTUIColors.NeutralBorder, MTUIColors.NeutralText);
             autoFitButton.style.marginTop = 4;
@@ -342,6 +399,7 @@ namespace JaimeCamachoDev.Multitool.Animation
             {
                 useCustomBounds = evt.newValue;
                 boundsField.SetEnabled(useCustomBounds);
+                SceneView.RepaintAll();
             });
 
             return panel;

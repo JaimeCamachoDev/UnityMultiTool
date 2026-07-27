@@ -18,8 +18,11 @@ namespace JaimeCamachoDev.Multitool.Animation
     // vertex shader pueda recolocar la posición muestreada de _Position_texture en su sitio.
     public static class VATCombinerTool
     {
+        private enum VatLighting { Lit, Unlit }
+
         private static GameObject rootObject;
-        private static Shader multipleMeshShader;
+        private static VatLighting lighting = VatLighting.Lit;
+        private static Shader manualShaderOverride;
         private static string outputName = "VATCrowd";
         private static DefaultAsset outputFolder;
         private static bool removeOriginalsAfterCombine = true;
@@ -84,13 +87,49 @@ namespace JaimeCamachoDev.Multitool.Animation
 
                 var optionsPanel = new MTUIPanel("Opciones") { style = { marginTop = 10 } };
 
-                var shaderField = new ObjectField("Shader VAT Multiple Mesh") { objectType = typeof(Shader), allowSceneObjects = false, value = multipleMeshShader };
-                shaderField.RegisterValueChangedCallback(evt => multipleMeshShader = evt.newValue as Shader);
-                optionsPanel.Add(shaderField);
+                optionsPanel.Add(new MTUIInfoLabel("Shader del material combinado (VAT Multiple Mesh, incluido en el paquete)"));
+                var lightingRow = new VisualElement { style = { flexDirection = FlexDirection.Row } };
+                var lightingButtons = new List<(VatLighting mode, MTUIActionButton button)>();
 
-                if (multipleMeshShader == null)
+                void RefreshLightingColors()
                 {
-                    optionsPanel.Add(new HelpBox("Asigna el shader VAT Multiple Mesh (Lit o Unlit) que usará el material combinado.", HelpBoxMessageType.Warning));
+                    foreach (var (mode, button) in lightingButtons)
+                    {
+                        bool selected = mode == lighting;
+                        button.SetColors(
+                            selected ? MTUIColors.BlueBackground : MTUIColors.NeutralBackground,
+                            selected ? MTUIColors.BlueBorder : MTUIColors.NeutralBorder,
+                            selected ? MTUIColors.BlueText : MTUIColors.NeutralText);
+                    }
+                }
+
+                void AddLightingButton(string label, VatLighting mode)
+                {
+                    var button = new MTUIActionButton(label, () =>
+                    {
+                        lighting = mode;
+                        RefreshLightingColors();
+                    });
+                    button.style.flexGrow = 1;
+                    lightingButtons.Add((mode, button));
+                    lightingRow.Add(button);
+                }
+
+                AddLightingButton("Lit", VatLighting.Lit);
+                AddLightingButton("Unlit", VatLighting.Unlit);
+                RefreshLightingColors();
+                optionsPanel.Add(lightingRow);
+
+                var shaderOverrideFoldout = new Foldout { text = "Shader personalizado (opcional)", value = false, style = { marginTop = 6 } };
+                var shaderField = new ObjectField("Sustituir shader") { objectType = typeof(Shader), allowSceneObjects = false, value = manualShaderOverride };
+                shaderField.RegisterValueChangedCallback(evt => manualShaderOverride = evt.newValue as Shader);
+                shaderOverrideFoldout.Add(shaderField);
+                optionsPanel.Add(shaderOverrideFoldout);
+
+                Shader activeShader = GetActiveShader();
+                if (activeShader == null)
+                {
+                    optionsPanel.Add(new HelpBox("No se encontró el shader VAT Multiple Mesh en el paquete. Reinstala o repara el paquete, o asigna uno manualmente arriba.", HelpBoxMessageType.Error));
                 }
 
                 var nameField = new TextField("Nombre del resultado") { value = outputName };
@@ -109,11 +148,11 @@ namespace JaimeCamachoDev.Multitool.Animation
 
                 contentContainer.Add(BuildBoundsPanel());
 
-                bool canCombine = !anyGroupInvalid && multipleMeshShader != null;
+                bool canCombine = !anyGroupInvalid && activeShader != null;
 
                 var combineButton = new MTUIActionButton("Combinar instancias VAT", () =>
                 {
-                    CombineGroups(groups, multipleMeshShader, outputName, removeOriginalsAfterCombine);
+                    CombineGroups(groups, activeShader, outputName, removeOriginalsAfterCombine);
                     RefreshContent();
                 });
                 combineButton.style.marginTop = 10;
@@ -121,12 +160,46 @@ namespace JaimeCamachoDev.Multitool.Animation
                 contentContainer.Add(combineButton);
             }
 
-            root.RegisterCallback<AttachToPanelEvent>(_ => Selection.selectionChanged += RefreshContent);
-            root.RegisterCallback<DetachFromPanelEvent>(_ => Selection.selectionChanged -= RefreshContent);
+            root.RegisterCallback<AttachToPanelEvent>(_ =>
+            {
+                Selection.selectionChanged += RefreshContent;
+                SceneView.duringSceneGui += DrawBoundsPreview;
+            });
+            root.RegisterCallback<DetachFromPanelEvent>(_ =>
+            {
+                Selection.selectionChanged -= RefreshContent;
+                SceneView.duringSceneGui -= DrawBoundsPreview;
+            });
 
             RefreshContent();
 
             return root;
+        }
+
+        // El combinado horneado por CombineGroups ya está en espacio de mundo (CombineMeshes
+        // con useMatrices=true), así que los bounds personalizados se previsualizan
+        // directamente en espacio de mundo, sin transform de referencia.
+        private static void DrawBoundsPreview(SceneView sceneView)
+        {
+            if (!useCustomBounds)
+            {
+                return;
+            }
+
+            Color previousColor = Handles.color;
+            Handles.color = new Color(0.1f, 1f, 0.55f, 0.9f);
+            Handles.DrawWireCube(customBoundsCenter, customBoundsSize);
+            Handles.color = previousColor;
+        }
+
+        private static Shader GetActiveShader()
+        {
+            if (manualShaderOverride != null)
+            {
+                return manualShaderOverride;
+            }
+
+            return lighting == VatLighting.Lit ? VATShaderLibrary.MultipleMeshLit : VATShaderLibrary.MultipleMeshUnlit;
         }
 
         private static VisualElement BuildBoundsPanel()
@@ -144,13 +217,20 @@ namespace JaimeCamachoDev.Multitool.Animation
             {
                 customBoundsCenter = evt.newValue.center;
                 customBoundsSize = evt.newValue.size;
+                SceneView.RepaintAll();
             });
             panel.Add(boundsField);
+
+            if (useCustomBounds)
+            {
+                panel.Add(new MTUIInfoLabel("La caja verde en la vista de escena muestra estos bounds en tiempo real."));
+            }
 
             customToggle.RegisterValueChangedCallback(evt =>
             {
                 useCustomBounds = evt.newValue;
                 boundsField.SetEnabled(useCustomBounds);
+                SceneView.RepaintAll();
             });
 
             return panel;
