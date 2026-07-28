@@ -1,54 +1,70 @@
-using UnityEngine;
-using UnityEditor;
 using System.IO;
+using JaimeCamachoDev.Multitool.UI;
+using UnityEditor;
+using UnityEditor.UIElements;
+using UnityEngine;
+using UnityEngine.UIElements;
 
-namespace VZ_Optizone
+namespace JaimeCamachoDev.Multitool.Animation
 {
     public static class BakeMeshTool
     {
-        // Variables para el skinned mesh, nombre de la malla y la carpeta de destino
         private static SkinnedMeshRenderer skinnedMeshRenderer;
         private static string outputMeshName = "BakedMesh";
-        private static Object destinationFolder;
+        private static DefaultAsset destinationFolder;
 
-        // Método para dibujar la herramienta
-        public static void DrawTool()
+        public static VisualElement CreateGUI()
         {
-            GUILayout.Label("VZ Optizone - Bake Skinned Mesh Pose", EditorStyles.boldLabel);
+            var root = new VisualElement();
+            root.Add(new Label("Bake Pose") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginBottom = 6 } });
+            root.Add(new HelpBox(
+                "Hornea la pose actual de un SkinnedMeshRenderer en una malla estÃ¡tica y la guarda como un nuevo asset.",
+                HelpBoxMessageType.Info));
 
-            // Campo para seleccionar el SkinnedMeshRenderer
-            skinnedMeshRenderer = (SkinnedMeshRenderer)EditorGUILayout.ObjectField("Skinned Mesh Renderer", skinnedMeshRenderer, typeof(SkinnedMeshRenderer), true);
+            var contentContainer = new VisualElement { style = { marginTop = 6 } };
+            root.Add(contentContainer);
 
-            // Campo para seleccionar la carpeta de destino
-            destinationFolder = EditorGUILayout.ObjectField("Destination Folder", destinationFolder, typeof(Object), false);
-
-            // Campo para ingresar el nombre de la malla horneada
-            outputMeshName = EditorGUILayout.TextField("Mesh Name", outputMeshName);
-
-            GUILayout.Space(10);
-
-            // Botón para hornear la malla
-            if (GUILayout.Button("Bake Pose to Mesh"))
+            void RefreshContent()
             {
-                if (skinnedMeshRenderer != null && destinationFolder != null)
+                contentContainer.Clear();
+
+                var sourcePanel = new MTUIPanel("Origen");
+
+                var rendererField = new ObjectField("Skinned Mesh Renderer") { objectType = typeof(SkinnedMeshRenderer), allowSceneObjects = true, value = skinnedMeshRenderer };
+                rendererField.RegisterValueChangedCallback(evt => { skinnedMeshRenderer = evt.newValue as SkinnedMeshRenderer; RefreshContent(); });
+                sourcePanel.Add(rendererField);
+
+                var folderField = new ObjectField("Carpeta de destino") { objectType = typeof(DefaultAsset), allowSceneObjects = false, value = destinationFolder };
+                folderField.RegisterValueChangedCallback(evt => { destinationFolder = evt.newValue as DefaultAsset; RefreshContent(); });
+                sourcePanel.Add(folderField);
+
+                var nameField = new TextField("Nombre de la malla") { value = outputMeshName };
+                nameField.RegisterValueChangedCallback(evt => outputMeshName = evt.newValue);
+                sourcePanel.Add(nameField);
+
+                contentContainer.Add(sourcePanel);
+
+                bool canBake = skinnedMeshRenderer != null && destinationFolder != null;
+                if (!canBake)
                 {
-                    BakeMesh();
+                    contentContainer.Add(new HelpBox("Selecciona un Skinned Mesh Renderer y una carpeta de destino.", HelpBoxMessageType.Warning) { style = { marginTop = 10 } });
                 }
-                else
-                {
-                    Debug.LogWarning("Please select a SkinnedMeshRenderer and a destination folder.");
-                }
+
+                var bakeButton = new MTUIActionButton("Bake Pose to Mesh", BakeMesh);
+                bakeButton.style.marginTop = 10;
+                bakeButton.SetAvailable(canBake);
+                contentContainer.Add(bakeButton);
             }
+
+            RefreshContent();
+            return root;
         }
 
-        // Método para hornear la malla y guardarla en la carpeta especificada
         private static void BakeMesh()
         {
-            // Crear una nueva malla basada en la pose actual del SkinnedMeshRenderer
-            Mesh bakedMesh = new Mesh();
-            skinnedMeshRenderer.BakeMesh(bakedMesh); // Hornear la malla actual
+            var bakedMesh = new Mesh();
+            skinnedMeshRenderer.BakeMesh(bakedMesh);
 
-            // Obtener la ruta de la carpeta de destino
             string folderPath = AssetDatabase.GetAssetPath(destinationFolder);
             if (!Directory.Exists(folderPath))
             {
@@ -56,10 +72,8 @@ namespace VZ_Optizone
                 return;
             }
 
-            // Definir la ruta y nombre del nuevo archivo de malla
             string meshPath = Path.Combine(folderPath, outputMeshName + ".asset");
 
-            // Guardar la nueva malla como un asset
             AssetDatabase.CreateAsset(bakedMesh, meshPath);
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
@@ -68,4 +82,3 @@ namespace VZ_Optizone
         }
     }
 }
-

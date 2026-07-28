@@ -4,8 +4,6 @@ using System.Linq;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
-using VZ_Optizone;
-using VZOptizone;
 using JaimeCamachoDev.Multitool.Animation;
 using JaimeCamachoDev.Multitool.Lighting;
 using JaimeCamachoDev.Multitool.Misc;
@@ -141,7 +139,8 @@ namespace JaimeCamachoDev.Multitool
 
             categoryTools[Category.Miscelanea] = new List<string>
             {
-                "Renamer"
+                "Renamer",
+                "Crear Estructura de Escena"
             };
         }
 
@@ -161,10 +160,10 @@ namespace JaimeCamachoDev.Multitool
             toolDescriptions["Reset XForm"] = "Convierte la transformación actual en geometría para dejar el Transform en valores por defecto sin mover el objeto.";
 
             toolDescriptions["Remove blendshapes"] = "Elimina blendshapes innecesarios para aligerar tus modelos animados.";
-            toolDescriptions["Animation terminator"] = "Recorta clips de animacin hasta un frame especfico.";
-            toolDescriptions["Bake pose"] = "Aplica la pose actual de una malla skinneda a un mesh esttico.";
+            toolDescriptions["Animation terminator"] = "Recorta o renombra keys de animación en uno o varios clips.";
+            toolDescriptions["Bake pose"] = "Aplica la pose actual de una malla skinneada a un mesh estático.";
             toolDescriptions["Combine animations/ors into one"] = "Fusiona varias animaciones en un solo clip optimizado.";
-            toolDescriptions["Transfer bone weight"] = "Transfiere pesos de hueso entre mallas con distinta topologa.";
+            toolDescriptions["Transfer bone weight"] = "Transfiere pesos de hueso entre mallas con distinta topología.";
             toolDescriptions["Alembic to VAT"] = "Convierte una secuencia Alembic en texturas VAT listas para shader y prefab.";
             toolDescriptions["VAT Baker"] = "Hornea texturas VAT desde un Animator y sustituye el objeto animado por su versión estática con el shader ya asignado.";
             toolDescriptions["VAT UV Visual"] = "Empaqueta texturas en un atlas y reencuadra visualmente las UV de mallas clonadas para que compartan un mismo material VAT.";
@@ -177,12 +176,13 @@ namespace JaimeCamachoDev.Multitool
             toolDescriptions["Extract frames from video"] = "Exporta fotogramas individuales a partir de un vídeo.";
             toolDescriptions["Convert sprites to animation clip"] = "Genera clips de animación a partir de sprites 2D.";
 
-            toolDescriptions["Generate mesh uv lightmaps"] = "Crea coordenadas UV2 automticas listas para bake de luz.";
+            toolDescriptions["Generate mesh uv lightmaps"] = "Crea coordenadas UV2 automáticas listas para bake de luz.";
             toolDescriptions["Move UV inside grid"] = "Ajusta UVs para mantenerlos dentro del tile principal.";
             toolDescriptions["Lightmap checker"] = "Inspecciona y visualiza lightmaps en la escena actual.";
             toolDescriptions["Recalculate Mesh Bounds"] = "Ajusta los bounds de tus meshes para mejorar el culling.";
 
             toolDescriptions["Renamer"] = "Renombra objetos y assets en bloque con reglas flexibles.";
+            toolDescriptions["Crear Estructura de Escena"] = "Crea una jerarquía de organización estándar para la escena actual.";
         }
 
         private void BuildToolActions()
@@ -198,11 +198,11 @@ namespace JaimeCamachoDev.Multitool
             toolBuilders["Extract frames from video"] = VideoToFramesExtractorTool.CreateGUI;
             toolBuilders["Convert sprites to animation clip"] = UIAnimationClipGeneratorTool.CreateGUI;
 
-            toolDrawers["Remove blendshapes"] = BlendshapeRemovalTool.DrawTool;
-            toolDrawers["Animation terminator"] = AnimationTerminatorTool.DrawTool;
-            toolDrawers["Bake pose"] = BakeMeshTool.DrawTool;
-            toolDrawers["Combine animations/ors into one"] = CombineAnimationsWithPathsTool.DrawTool;
-            toolDrawers["Transfer bone weight"] = BoneWeightTransferTool.DrawTool;
+            toolBuilders["Remove blendshapes"] = BlendshapeRemovalTool.CreateGUI;
+            toolBuilders["Animation terminator"] = AnimationTerminatorTool.CreateGUI;
+            toolBuilders["Bake pose"] = BakeMeshTool.CreateGUI;
+            toolBuilders["Combine animations/ors into one"] = CombineAnimationsWithPathsTool.CreateGUI;
+            toolBuilders["Transfer bone weight"] = BoneWeightTransferTool.CreateGUI;
             toolDrawers["Alembic to VAT"] = AlembicToVatTool.DrawTool;
             toolBuilders["VAT Baker"] = AnimationClipTextureBakerTool.CreateGUI;
             toolBuilders["VAT UV Visual"] = VATUVVisualTool.CreateGUI;
@@ -211,6 +211,7 @@ namespace JaimeCamachoDev.Multitool
 
             toolBuilders["Lightmap checker"] = LightmapCheckerTool.CreateGUI;
             toolBuilders["Renamer"] = RenameTool.CreateGUI;
+            toolBuilders["Crear Estructura de Escena"] = SceneStructureCreatorTool.CreateGUI;
             toolBuilders["Hollow shell"] = HollowShellMeshTool.CreateGUI;
             toolBuilders["Multi material Finder"] = MultiMaterialFinderTool.CreateGUI;
             toolBuilders["Multi material splitter"] = MultimaterialMeshSplitterTool.CreateGUI;

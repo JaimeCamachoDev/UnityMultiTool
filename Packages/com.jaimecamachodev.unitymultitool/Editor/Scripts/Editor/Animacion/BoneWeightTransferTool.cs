@@ -1,34 +1,58 @@
-using UnityEngine;
-using UnityEditor;
 using System.Collections.Generic;
+using JaimeCamachoDev.Multitool.UI;
+using UnityEditor;
+using UnityEditor.UIElements;
+using UnityEngine;
+using UnityEngine.UIElements;
 
-namespace VZOptizone
+namespace JaimeCamachoDev.Multitool.Animation
 {
     public static class BoneWeightTransferTool
     {
         private static SkinnedMeshRenderer originalMeshRenderer;
         private static SkinnedMeshRenderer modifiedMeshRenderer;
 
-        public static void DrawTool()
+        public static VisualElement CreateGUI()
         {
-            EditorGUILayout.LabelField("Paso 1: Selecciona la malla original y la recortada", EditorStyles.boldLabel);
+            var root = new VisualElement();
+            root.Add(new Label("Transfer Bone Weight") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginBottom = 6 } });
+            root.Add(new HelpBox(
+                "Transfiere los bone weights de una malla original a una versiÃ³n recortada de la misma malla, emparejando vÃ©rtices por posiciÃ³n.",
+                HelpBoxMessageType.Info));
 
-            originalMeshRenderer = (SkinnedMeshRenderer)EditorGUILayout.ObjectField("Malla Original", originalMeshRenderer, typeof(SkinnedMeshRenderer), true);
-            modifiedMeshRenderer = (SkinnedMeshRenderer)EditorGUILayout.ObjectField("Malla Recortada", modifiedMeshRenderer, typeof(SkinnedMeshRenderer), true);
+            var contentContainer = new VisualElement { style = { marginTop = 6 } };
+            root.Add(contentContainer);
 
-            GUILayout.Space(20);
-
-            if (GUILayout.Button("Transferir Bone Weights"))
+            void RefreshContent()
             {
-                if (originalMeshRenderer != null && modifiedMeshRenderer != null)
+                contentContainer.Clear();
+
+                var sourcePanel = new MTUIPanel("Paso 1: Selecciona la malla original y la recortada");
+
+                var originalField = new ObjectField("Malla Original") { objectType = typeof(SkinnedMeshRenderer), allowSceneObjects = true, value = originalMeshRenderer };
+                originalField.RegisterValueChangedCallback(evt => { originalMeshRenderer = evt.newValue as SkinnedMeshRenderer; RefreshContent(); });
+                sourcePanel.Add(originalField);
+
+                var modifiedField = new ObjectField("Malla Recortada") { objectType = typeof(SkinnedMeshRenderer), allowSceneObjects = true, value = modifiedMeshRenderer };
+                modifiedField.RegisterValueChangedCallback(evt => { modifiedMeshRenderer = evt.newValue as SkinnedMeshRenderer; RefreshContent(); });
+                sourcePanel.Add(modifiedField);
+
+                contentContainer.Add(sourcePanel);
+
+                bool canTransfer = originalMeshRenderer != null && modifiedMeshRenderer != null;
+                if (!canTransfer)
                 {
-                    TransferBoneWeights();
+                    contentContainer.Add(new HelpBox("AsegÃºrate de seleccionar ambas mallas.", HelpBoxMessageType.Warning) { style = { marginTop = 10 } });
                 }
-                else
-                {
-                    Debug.LogError("Asegúrate de seleccionar ambas mallas.");
-                }
+
+                var transferButton = new MTUIActionButton("Transferir Bone Weights", TransferBoneWeights);
+                transferButton.style.marginTop = 10;
+                transferButton.SetAvailable(canTransfer);
+                contentContainer.Add(transferButton);
             }
+
+            RefreshContent();
+            return root;
         }
 
         private static void TransferBoneWeights()
@@ -43,14 +67,13 @@ namespace VZOptizone
             }
 
             BoneWeight[] originalWeights = originalMesh.boneWeights;
-            BoneWeight[] newWeights = new BoneWeight[modifiedMesh.vertexCount];
+            var newWeights = new BoneWeight[modifiedMesh.vertexCount];
 
             Vector3[] originalVertices = originalMesh.vertices;
             Vector3[] modifiedVertices = modifiedMesh.vertices;
 
-            Dictionary<int, int> vertexMap = new Dictionary<int, int>();
+            var vertexMap = new Dictionary<int, int>();
 
-            // Mapeo de vértices por posición
             for (int i = 0; i < modifiedVertices.Length; i++)
             {
                 Vector3 modPos = modifiedMeshRenderer.transform.TransformPoint(modifiedVertices[i]);
@@ -67,20 +90,22 @@ namespace VZOptizone
 
             for (int i = 0; i < modifiedMesh.vertexCount; i++)
             {
-                if (vertexMap.ContainsKey(i))
+                if (vertexMap.TryGetValue(i, out int originalIndex))
                 {
-                    int originalIndex = vertexMap[i];
                     newWeights[i] = originalWeights[originalIndex];
                 }
                 else
                 {
-                    Debug.LogWarning($"Vértice {i} no encontró un peso correspondiente. Asignando valores predeterminados.");
+                    Debug.LogWarning($"VÃ©rtice {i} no encontrÃ³ un peso correspondiente. Asignando valores predeterminados.");
                     newWeights[i] = new BoneWeight();
                 }
             }
 
             modifiedMesh.boneWeights = newWeights;
             modifiedMeshRenderer.sharedMesh = modifiedMesh;
+
+            EditorUtility.SetDirty(modifiedMesh);
+            AssetDatabase.SaveAssets();
 
             Debug.Log("Transferencia de Bone Weights completada.");
         }
