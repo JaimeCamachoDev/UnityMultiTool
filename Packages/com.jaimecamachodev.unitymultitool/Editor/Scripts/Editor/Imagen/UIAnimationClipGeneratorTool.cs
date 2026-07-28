@@ -4,8 +4,8 @@ using JaimeCamachoDev.Multitool.UI;
 using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine;
-using UnityEngine.UI;
 using UnityEngine.UIElements;
+using Image = UnityEngine.UI.Image;
 
 namespace JaimeCamachoDev.Multitool.Textures
 {
