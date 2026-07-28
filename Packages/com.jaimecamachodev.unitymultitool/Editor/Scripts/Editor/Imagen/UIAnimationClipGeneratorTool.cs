@@ -1,87 +1,111 @@
-using UnityEngine;
-using UnityEditor;
-using UnityEngine.UI;
 using System.Collections.Generic;
 using System.Linq;
+using JaimeCamachoDev.Multitool.UI;
+using UnityEditor;
+using UnityEditor.UIElements;
+using UnityEngine;
+using UnityEngine.UI;
+using UnityEngine.UIElements;
 
-namespace VZOptizone
+namespace JaimeCamachoDev.Multitool.Textures
 {
     public static class UIAnimationClipGeneratorTool
     {
-        private static AnimationClip animationClip;
-        private static List<Sprite> sprites = new List<Sprite>();
+        private static readonly List<Sprite> sprites = new List<Sprite>();
         private static float timeBetweenFrames = 0.1f;
         private static Image targetImage;
 
-        public static void DrawTool()
+        public static VisualElement CreateGUI()
         {
-            GUILayout.Label("Animation Clip Settings", EditorStyles.boldLabel);
+            var root = new VisualElement();
+            root.Add(new Label("Convert Sprites to Animation Clip") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginBottom = 6 } });
+            root.Add(new HelpBox(
+                "Genera un AnimationClip que reproduce una secuencia de sprites sobre un componente Image de UI.",
+                HelpBoxMessageType.Info));
 
-            GUILayout.Space(10f);
+            var contentContainer = new VisualElement { style = { marginTop = 6 } };
+            root.Add(contentContainer);
 
-            // Campo para la duración entre fotogramas
-            timeBetweenFrames = EditorGUILayout.FloatField("Time Between Frames:", timeBetweenFrames);
-
-            GUILayout.Space(10f);
-
-            // Campo para asignar el `Image` de destino en la UI
-            targetImage = EditorGUILayout.ObjectField("Target Image:", targetImage, typeof(Image), true) as Image;
-
-            GUILayout.Space(10f);
-
-            // Selección de los sprites
-            GUILayout.Label("Select Sprites for Animation:", EditorStyles.boldLabel);
-            GUILayout.Space(5f);
-
-            if (GUILayout.Button("Select Sprites", GUILayout.Width(150)))
+            void RefreshContent()
             {
-                SelectSprites();
-            }
+                contentContainer.Clear();
 
-            // Muestra una lista de sprites seleccionados
-            GUILayout.Space(10f);
-            if (sprites.Count > 0)
-            {
-                GUILayout.Label($"Selected Sprites ({sprites.Count}):", EditorStyles.boldLabel);
-                foreach (var sprite in sprites)
+                var settingsPanel = new MTUIPanel("Ajustes");
+
+                var timeField = new FloatField("Tiempo entre fotogramas") { value = timeBetweenFrames };
+                timeField.RegisterValueChangedCallback(evt => timeBetweenFrames = evt.newValue);
+                settingsPanel.Add(timeField);
+
+                var targetField = new ObjectField("Image de destino") { objectType = typeof(Image), allowSceneObjects = true, value = targetImage };
+                targetField.RegisterValueChangedCallback(evt => { targetImage = evt.newValue as Image; RefreshContent(); });
+                settingsPanel.Add(targetField);
+
+                contentContainer.Add(settingsPanel);
+
+                var spritesPanel = new MTUIPanel("Sprites") { style = { marginTop = 10 } };
+                spritesPanel.Add(new MTUIInfoLabel("Selecciona los sprites en la ventana Project y pulsa \"Select Sprites\"."));
+
+                var selectButton = new MTUIActionButton("Select Sprites", () =>
                 {
-                    GUILayout.Label(sprite.name);
+                    SelectSprites();
+                    RefreshContent();
+                });
+                selectButton.style.marginTop = 6;
+                spritesPanel.Add(selectButton);
+
+                if (sprites.Count > 0)
+                {
+                    var scroll = new ScrollView { style = { maxHeight = 200, marginTop = 6 } };
+                    foreach (Sprite sprite in sprites)
+                    {
+                        scroll.Add(new Label(sprite.name));
+                    }
+                    spritesPanel.Add(new MTUIInfoLabel($"{sprites.Count} sprite(s) seleccionado(s):") { style = { marginTop = 6 } });
+                    spritesPanel.Add(scroll);
                 }
+
+                contentContainer.Add(spritesPanel);
+
+                bool canGenerate = sprites.Count > 0 && targetImage != null;
+                if (sprites.Count == 0)
+                {
+                    contentContainer.Add(new HelpBox("Selecciona al menos un sprite para generar la animaciÃ³n.", HelpBoxMessageType.Warning) { style = { marginTop = 10 } });
+                }
+                else if (targetImage == null)
+                {
+                    contentContainer.Add(new HelpBox("Asigna la Image de destino de la animaciÃ³n.", HelpBoxMessageType.Warning) { style = { marginTop = 10 } });
+                }
+
+                var generateButton = new MTUIActionButton("Generate Animation Clip", GenerateAnimationClip);
+                generateButton.style.marginTop = 10;
+                generateButton.SetAvailable(canGenerate);
+                contentContainer.Add(generateButton);
             }
 
-            GUILayout.Space(20f);
-
-            // Botón para generar el clip de animación
-            if (GUILayout.Button("Generate Animation Clip"))
-            {
-                GenerateAnimationClip();
-            }
+            RefreshContent();
+            return root;
         }
 
         private static void SelectSprites()
         {
-            // Limpia la lista de sprites antes de agregar nuevos
             sprites.Clear();
 
-            // Obtener los GUID de los objetos seleccionados en el editor
             string[] guids = Selection.assetGUIDs;
 
-            // Cargar todos los assets seleccionados
             foreach (string guid in guids)
             {
                 string path = AssetDatabase.GUIDToAssetPath(guid);
                 Object[] assets = AssetDatabase.LoadAllAssetsAtPath(path);
                 foreach (Object asset in assets)
                 {
-                    if (asset is Sprite)
+                    if (asset is Sprite sprite)
                     {
-                        sprites.Add(asset as Sprite);
+                        sprites.Add(sprite);
                     }
                 }
             }
 
-            // Ordenar los sprites alfabéticamente por nombre para mantener el orden
-            sprites = sprites.OrderBy(sprite => sprite.name).ToList();
+            sprites.Sort((a, b) => string.Compare(a.name, b.name, System.StringComparison.Ordinal));
         }
 
         private static void GenerateAnimationClip()
@@ -98,22 +122,19 @@ namespace VZOptizone
                 return;
             }
 
-            // Crear un nuevo clip de animación
-            animationClip = new AnimationClip
+            var animationClip = new AnimationClip
             {
                 frameRate = 1f / timeBetweenFrames
             };
 
-            // Definir curvas para las propiedades de los sprites
-            EditorCurveBinding spriteBinding = new EditorCurveBinding
+            var spriteBinding = new EditorCurveBinding
             {
                 type = typeof(Image),
                 path = "",
                 propertyName = "m_Sprite"
             };
 
-            // Crear keyframes para el clip de animación
-            ObjectReferenceKeyframe[] keyFrames = new ObjectReferenceKeyframe[sprites.Count];
+            var keyFrames = new ObjectReferenceKeyframe[sprites.Count];
             for (int i = 0; i < sprites.Count; i++)
             {
                 keyFrames[i] = new ObjectReferenceKeyframe
@@ -123,10 +144,8 @@ namespace VZOptizone
                 };
             }
 
-            // Asignar los keyframes al clip de animación
             AnimationUtility.SetObjectReferenceCurve(animationClip, spriteBinding, keyFrames);
 
-            // Guardar el clip de animación
             string clipPath = EditorUtility.SaveFilePanelInProject("Save Animation Clip", "NewAnimationClip", "anim", "Please enter a name for the animation clip.");
             if (!string.IsNullOrEmpty(clipPath))
             {

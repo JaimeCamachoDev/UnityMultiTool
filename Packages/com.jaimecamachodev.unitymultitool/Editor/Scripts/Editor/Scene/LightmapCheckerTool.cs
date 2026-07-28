@@ -1,75 +1,94 @@
-using UnityEngine;
-using UnityEditor;
 using System.Collections.Generic;
+using JaimeCamachoDev.Multitool.UI;
+using UnityEditor;
+using UnityEngine;
+using UnityEngine.UIElements;
 
-
-namespace VZOptizone
+namespace JaimeCamachoDev.Multitool.Lighting
 {
     public static class LightmapCheckerTool
     {
-        private static List<GameObject> lightmappedObjects = new List<GameObject>();
-        private static Vector2 scrollPosLightmaps;
-        private static GameObject selectedObject;
+        private static readonly List<GameObject> lightmappedObjects = new List<GameObject>();
 
-        public static void DrawTool()
+        public static VisualElement CreateGUI()
         {
-            GUILayout.Label("Lightmap Checker", EditorStyles.boldLabel);
+            var root = new VisualElement();
 
-            // Botón para revisar la escena en busca de lightmaps
-            if (GUILayout.Button("Check Scene for Lightmaps"))
+            root.Add(new Label("Lightmap Checker") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginBottom = 6 } });
+            root.Add(new HelpBox("Busca en la escena los objetos que tienen un lightmap horneado asignado.", HelpBoxMessageType.Info));
+
+            var resultsContainer = new VisualElement { style = { marginTop = 10 } };
+
+            var checkButton = new MTUIActionButton("Check Scene for Lightmaps", () =>
             {
                 CheckScene();
+                RefreshResults(resultsContainer);
+            });
+            checkButton.style.marginTop = 10;
+            root.Add(checkButton);
+
+            root.Add(resultsContainer);
+            RefreshResults(resultsContainer);
+
+            return root;
+        }
+
+        private static void RefreshResults(VisualElement container)
+        {
+            container.Clear();
+
+            if (lightmappedObjects.Count == 0)
+            {
+                container.Add(new HelpBox("No se encontraron objetos con lightmap asignado.", HelpBoxMessageType.Info));
+                return;
             }
 
-            GUILayout.Space(10);
+            var resultsPanel = new MTUIPanel($"Objetos con lightmap ({lightmappedObjects.Count})");
 
-            // Mostrar los objetos con lightmaps
-            GUILayout.Label("Objects with Lightmaps:", EditorStyles.boldLabel);
-            scrollPosLightmaps = EditorGUILayout.BeginScrollView(scrollPosLightmaps, GUILayout.Height(600)); // Ajusta la altura según sea necesario
-            DisplayObjectList(lightmappedObjects);
-            EditorGUILayout.EndScrollView();
+            var scroll = new ScrollView { style = { maxHeight = 400 } };
+            foreach (GameObject go in lightmappedObjects)
+            {
+                if (go == null)
+                {
+                    continue;
+                }
+
+                var row = new VisualElement { style = { flexDirection = FlexDirection.Row, alignItems = Align.Center, marginBottom = 2 } };
+
+                var selectButton = new MTUIActionButton(go.name, () =>
+                {
+                    Selection.activeGameObject = go;
+                    EditorGUIUtility.PingObject(go);
+                    if (SceneView.lastActiveSceneView != null)
+                    {
+                        SceneView.lastActiveSceneView.FrameSelected();
+                    }
+                }, MTUIColors.NeutralBackground, MTUIColors.NeutralBorder, MTUIColors.NeutralText, TextAnchor.MiddleLeft);
+                selectButton.style.width = 200;
+                row.Add(selectButton);
+
+                var highlightButton = new MTUIActionButton("Highlight", () => EditorGUIUtility.PingObject(go),
+                    MTUIColors.NeutralBackground, MTUIColors.NeutralBorder, MTUIColors.NeutralText);
+                highlightButton.style.width = 100;
+                row.Add(highlightButton);
+
+                scroll.Add(row);
+            }
+            resultsPanel.Add(scroll);
+            container.Add(resultsPanel);
         }
 
         private static void CheckScene()
         {
             lightmappedObjects.Clear();
 
-            MeshRenderer[] meshRenderers = Object.FindObjectsByType<MeshRenderer>();
-
-            foreach (var renderer in meshRenderers)
+            MeshRenderer[] meshRenderers = Object.FindObjectsByType<MeshRenderer>(FindObjectsSortMode.None);
+            foreach (MeshRenderer renderer in meshRenderers)
             {
-                // Comprobar si el objeto tiene asignado un lightmap
                 if (renderer.lightmapIndex != -1)
                 {
                     lightmappedObjects.Add(renderer.gameObject);
                 }
-            }
-        }
-
-        private static void DisplayObjectList(List<GameObject> objects)
-        {
-            foreach (var obj in objects)
-            {
-                EditorGUILayout.BeginHorizontal();
-
-                GUIStyle style = new GUIStyle(GUI.skin.button);
-
-                // Resaltar el botón si es el objeto seleccionado
-                if (obj == selectedObject)
-                {
-                    style.normal.textColor = Color.green;
-                    style.fontStyle = FontStyle.Bold;
-                }
-
-                if (GUILayout.Button(obj.name, style, GUILayout.ExpandWidth(true)))
-                {
-                    selectedObject = obj;
-                    Selection.activeObject = obj;
-                    EditorGUIUtility.PingObject(obj);
-                    SceneView.lastActiveSceneView.FrameSelected();
-                }
-
-                EditorGUILayout.EndHorizontal();
             }
         }
     }
