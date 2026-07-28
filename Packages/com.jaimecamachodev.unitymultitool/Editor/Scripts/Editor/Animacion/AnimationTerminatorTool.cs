@@ -1,87 +1,140 @@
-using UnityEngine;
-using UnityEditor;
-using UnityEditor.Animations;
 using System.Collections.Generic;
+using System.Linq;
+using JaimeCamachoDev.Multitool.UI;
+using UnityEditor;
+using UnityEditor.UIElements;
+using UnityEngine;
+using UnityEngine.UIElements;
 
-namespace VZOptizone
+namespace JaimeCamachoDev.Multitool.Animation
 {
     public static class AnimationTerminatorTool
     {
-        private static List<AnimationClip> clips = new List<AnimationClip>();
+        private static readonly List<AnimationClip> clips = new List<AnimationClip>();
         private static string nameToRemove = "Texto a eliminar";
         private static string nameToSearch = "Texto a buscar";
         private static string nameToReplace = "Texto a reemplazar";
 
-        public static void DrawTool()
+        public static VisualElement CreateGUI()
         {
-            GUILayout.Label("Animation Clips", EditorStyles.boldLabel);
+            var root = new VisualElement();
+            root.Add(new Label("Animation Terminator") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginBottom = 6 } });
+            root.Add(new HelpBox(
+                "Elimina o renombra keys de animaci√≥n (escala, posici√≥n, rotaci√≥n, visibilidad) en uno o varios AnimationClip.",
+                HelpBoxMessageType.Info));
 
-            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+            var contentContainer = new VisualElement { style = { marginTop = 6 } };
+            root.Add(contentContainer);
 
-            for (int i = 0; i < clips.Count; i++)
+            void RefreshContent()
             {
-                clips[i] = (AnimationClip)EditorGUILayout.ObjectField("Clip " + i, clips[i], typeof(AnimationClip), false);
+                contentContainer.Clear();
+
+                var clipsPanel = new MTUIPanel("Animation Clips");
+
+                var scroll = new ScrollView { style = { maxHeight = 200 } };
+                for (int i = 0; i < clips.Count; i++)
+                {
+                    int index = i;
+                    var row = new VisualElement { style = { flexDirection = FlexDirection.Row, alignItems = Align.Center, marginBottom = 2 } };
+
+                    var clipField = new ObjectField($"Clip {index}") { objectType = typeof(AnimationClip), allowSceneObjects = false, value = clips[index], style = { flexGrow = 1 } };
+                    clipField.RegisterValueChangedCallback(evt => clips[index] = evt.newValue as AnimationClip);
+                    row.Add(clipField);
+
+                    var removeButton = new MTUIActionButton("X", () =>
+                    {
+                        clips.RemoveAt(index);
+                        RefreshContent();
+                    }, MTUIColors.NeutralBackground, MTUIColors.NeutralBorder, MTUIColors.NeutralText);
+                    removeButton.style.marginLeft = 4;
+                    removeButton.style.width = 24;
+                    row.Add(removeButton);
+
+                    scroll.Add(row);
+                }
+                clipsPanel.Add(scroll);
+
+                var addButton = new MTUIActionButton("Add Animation Clip", () =>
+                {
+                    clips.Add(null);
+                    RefreshContent();
+                });
+                addButton.style.marginTop = 6;
+                clipsPanel.Add(addButton);
+
+                var removeNullButton = new MTUIActionButton("Remove Null Clips", () =>
+                {
+                    clips.RemoveAll(clip => clip == null);
+                    RefreshContent();
+                });
+                removeNullButton.style.marginTop = 4;
+                clipsPanel.Add(removeNullButton);
+
+                contentContainer.Add(clipsPanel);
+
+                bool hasClips = clips.Any(clip => clip != null);
+                if (!hasClips)
+                {
+                    contentContainer.Add(new HelpBox("A√±ade al menos un Animation Clip para poder operar sobre √©l.", HelpBoxMessageType.Warning) { style = { marginTop = 10 } });
+                }
+
+                var removeKeysPanel = new MTUIPanel("Remove Keys") { style = { marginTop = 10 } };
+
+                var removeScaleButton = new MTUIActionButton("Remove Scale Keys", () => RemoveKeys("m_LocalScale"));
+                removeScaleButton.SetAvailable(hasClips);
+                removeKeysPanel.Add(removeScaleButton);
+
+                var removePositionButton = new MTUIActionButton("Remove Position Keys", () => RemoveKeys("m_LocalPosition"));
+                removePositionButton.style.marginTop = 4;
+                removePositionButton.SetAvailable(hasClips);
+                removeKeysPanel.Add(removePositionButton);
+
+                var removeRotationButton = new MTUIActionButton("Remove Rotation Keys", () => RemoveKeys("m_LocalRotation"));
+                removeRotationButton.style.marginTop = 4;
+                removeRotationButton.SetAvailable(hasClips);
+                removeKeysPanel.Add(removeRotationButton);
+
+                var removeRendererButton = new MTUIActionButton("Remove Renderer Enabled Keys", RemoveRendererEnabledKeys);
+                removeRendererButton.style.marginTop = 4;
+                removeRendererButton.SetAvailable(hasClips);
+                removeKeysPanel.Add(removeRendererButton);
+
+                contentContainer.Add(removeKeysPanel);
+
+                var removeByNamePanel = new MTUIPanel("Eliminar Keys por Nombre") { style = { marginTop = 10 } };
+
+                var nameToRemoveField = new TextField("Texto a eliminar") { value = nameToRemove };
+                nameToRemoveField.RegisterValueChangedCallback(evt => nameToRemove = evt.newValue);
+                removeByNamePanel.Add(nameToRemoveField);
+
+                var removeByNameButton = new MTUIActionButton("Eliminar Keys por Nombre", () => RemoveKeysByName(nameToRemove));
+                removeByNameButton.style.marginTop = 6;
+                removeByNameButton.SetAvailable(hasClips);
+                removeByNamePanel.Add(removeByNameButton);
+
+                contentContainer.Add(removeByNamePanel);
+
+                var replacePanel = new MTUIPanel("Buscar y Reemplazar Nombres") { style = { marginTop = 10 } };
+
+                var searchField = new TextField("Buscar") { value = nameToSearch };
+                searchField.RegisterValueChangedCallback(evt => nameToSearch = evt.newValue);
+                replacePanel.Add(searchField);
+
+                var replaceField = new TextField("Reemplazar") { value = nameToReplace };
+                replaceField.RegisterValueChangedCallback(evt => nameToReplace = evt.newValue);
+                replacePanel.Add(replaceField);
+
+                var replaceButton = new MTUIActionButton("Reemplazar Nombres en Keys", () => ReplaceKeysByName(nameToSearch, nameToReplace));
+                replaceButton.style.marginTop = 6;
+                replaceButton.SetAvailable(hasClips);
+                replacePanel.Add(replaceButton);
+
+                contentContainer.Add(replacePanel);
             }
 
-            // BotÛn para aÒadir m·s clips
-            if (GUILayout.Button("Add Animation Clip"))
-            {
-                clips.Add(null); // AÒadir un nuevo espacio para un clip
-            }
-
-            // BotÛn para eliminar clips vacÌos
-            if (GUILayout.Button("Remove Null Clips"))
-            {
-                clips.RemoveAll(clip => clip == null); // Eliminar clips que no han sido asignados
-            }
-
-            EditorGUILayout.EndVertical();
-
-            GUILayout.Space(10);
-
-            // Botones para remover Keys de Scale, Position, Rotation, Renderer Enabled
-            GUILayout.Label("Remove Keys", EditorStyles.boldLabel);
-            if (GUILayout.Button("Remove Scale Keys"))
-            {
-                RemoveKeys("m_LocalScale");
-            }
-
-            if (GUILayout.Button("Remove Position Keys"))
-            {
-                RemoveKeys("m_LocalPosition");
-            }
-
-            if (GUILayout.Button("Remove Rotation Keys"))
-            {
-                RemoveKeys("m_LocalRotation");
-            }
-
-            if (GUILayout.Button("Remove Renderer Enabled Keys"))
-            {
-                RemoveRendererEnabledKeys();
-            }
-
-            GUILayout.Space(10);
-
-            // Campo para eliminar Keys por nombre
-            GUILayout.Label("Eliminar Keys por Nombre", EditorStyles.boldLabel);
-            nameToRemove = EditorGUILayout.TextField("Texto a eliminar", nameToRemove);
-            if (GUILayout.Button("Eliminar Keys por Nombre"))
-            {
-                RemoveKeysByName(nameToRemove);
-            }
-
-            GUILayout.Space(10);
-
-            // Campos para buscar y reemplazar nombres en los clips
-            GUILayout.Label("Buscar y Reemplazar Nombres", EditorStyles.boldLabel);
-            nameToSearch = EditorGUILayout.TextField("Buscar", nameToSearch);
-            nameToReplace = EditorGUILayout.TextField("Reemplazar", nameToReplace);
-
-            if (GUILayout.Button("Reemplazar Nombres en Keys"))
-            {
-                ReplaceKeysByName(nameToSearch, nameToReplace);
-            }
+            RefreshContent();
+            return root;
         }
 
         private static void RemoveKeys(string propertyName)
@@ -159,15 +212,13 @@ namespace VZOptizone
                 {
                     if (binding.path.Contains(search) || binding.propertyName.Contains(search))
                     {
-                        // Crear un nuevo binding con los valores reemplazados
                         var newBinding = binding;
                         newBinding.path = binding.path.Replace(search, replace);
                         newBinding.propertyName = binding.propertyName.Replace(search, replace);
 
-                        // Copiar la curva desde el binding original al nuevo binding
                         AnimationCurve curve = AnimationUtility.GetEditorCurve(clip, binding);
-                        AnimationUtility.SetEditorCurve(clip, binding, null); // Eliminar el binding original
-                        AnimationUtility.SetEditorCurve(clip, newBinding, curve); // Crear la nueva curva
+                        AnimationUtility.SetEditorCurve(clip, binding, null);
+                        AnimationUtility.SetEditorCurve(clip, newBinding, curve);
 
                         changedKeysCount++;
                     }

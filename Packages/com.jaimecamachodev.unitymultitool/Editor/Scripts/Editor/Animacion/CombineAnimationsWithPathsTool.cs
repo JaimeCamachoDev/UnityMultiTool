@@ -1,41 +1,67 @@
-using UnityEngine;
-using UnityEditor;
 using System.Collections.Generic;
-using System.IO;
+using JaimeCamachoDev.Multitool.UI;
+using UnityEditor;
+using UnityEditor.UIElements;
+using UnityEngine;
+using UnityEngine.UIElements;
 
-namespace VZOptizone
+namespace JaimeCamachoDev.Multitool.Animation
 {
     public static class CombineAnimationsWithPathsTool
     {
-        private static GameObject parentObject; // Objeto padre con los hijos que contienen animaciones
-        private static string newClipName = "CombinedAnimationClip"; // Nombre predeterminado del nuevo clip combinado
-        private static DefaultAsset saveFolder; // Carpeta de destino como DefaultAsset
+        private static GameObject parentObject;
+        private static string newClipName = "CombinedAnimationClip";
+        private static DefaultAsset saveFolder;
 
-        public static void DrawTool()
+        public static VisualElement CreateGUI()
         {
-            EditorGUILayout.LabelField("1. Selecciona el Objeto Padre", EditorStyles.boldLabel);
-            parentObject = (GameObject)EditorGUILayout.ObjectField("Objeto Padre", parentObject, typeof(GameObject), true);
+            var root = new VisualElement();
+            root.Add(new Label("Combine Animations Into One") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginBottom = 6 } });
+            root.Add(new HelpBox(
+                "Combina las animaciones de todos los Animator hijos de un objeto padre en un √∫nico AnimationClip, prefijando cada ruta con el nombre del hijo de origen.",
+                HelpBoxMessageType.Info));
 
-            EditorGUILayout.LabelField("2. Nombre del Nuevo Clip", EditorStyles.boldLabel);
-            newClipName = EditorGUILayout.TextField("Nombre del Clip", newClipName);
+            var contentContainer = new VisualElement { style = { marginTop = 6 } };
+            root.Add(contentContainer);
 
-            EditorGUILayout.LabelField("3. Carpeta de Guardado", EditorStyles.boldLabel);
-            saveFolder = (DefaultAsset)EditorGUILayout.ObjectField("Carpeta de Guardado", saveFolder, typeof(DefaultAsset), false);
-
-            GUILayout.Space(20);
-
-            if (GUILayout.Button("Combinar Animaciones"))
+            void RefreshContent()
             {
-                if (parentObject != null && saveFolder != null)
+                contentContainer.Clear();
+
+                var sourcePanel = new MTUIPanel("Origen");
+
+                var parentField = new ObjectField("Objeto Padre") { objectType = typeof(GameObject), allowSceneObjects = true, value = parentObject };
+                parentField.RegisterValueChangedCallback(evt => { parentObject = evt.newValue as GameObject; RefreshContent(); });
+                sourcePanel.Add(parentField);
+
+                contentContainer.Add(sourcePanel);
+
+                var outputPanel = new MTUIPanel("Salida") { style = { marginTop = 10 } };
+
+                var nameField = new TextField("Nombre del Clip") { value = newClipName };
+                nameField.RegisterValueChangedCallback(evt => newClipName = evt.newValue);
+                outputPanel.Add(nameField);
+
+                var folderField = new ObjectField("Carpeta de Guardado") { objectType = typeof(DefaultAsset), allowSceneObjects = false, value = saveFolder };
+                folderField.RegisterValueChangedCallback(evt => { saveFolder = evt.newValue as DefaultAsset; RefreshContent(); });
+                outputPanel.Add(folderField);
+
+                contentContainer.Add(outputPanel);
+
+                bool canCombine = parentObject != null && saveFolder != null;
+                if (!canCombine)
                 {
-                    CombineAnimations();
+                    contentContainer.Add(new HelpBox("Selecciona el objeto padre y una carpeta de guardado.", HelpBoxMessageType.Warning) { style = { marginTop = 10 } });
                 }
-                else
-                {
-                    if (parentObject == null) Debug.LogError("Por favor selecciona el objeto padre.");
-                    if (saveFolder == null) Debug.LogError("Por favor selecciona una carpeta de guardado.");
-                }
+
+                var combineButton = new MTUIActionButton("Combinar Animaciones", CombineAnimations);
+                combineButton.style.marginTop = 10;
+                combineButton.SetAvailable(canCombine);
+                contentContainer.Add(combineButton);
             }
+
+            RefreshContent();
+            return root;
         }
 
         private static void CombineAnimations()
@@ -44,12 +70,12 @@ namespace VZOptizone
 
             if (!AssetDatabase.IsValidFolder(saveFolderPath))
             {
-                Debug.LogError("La carpeta especificada no es v·lida. Verifica la ruta.");
+                Debug.LogError("La carpeta especificada no es v√°lida. Verifica la ruta.");
                 return;
             }
 
-            List<AnimationClip> clipsToCombine = new List<AnimationClip>();
-            Dictionary<string, AnimationClip> clipPaths = new Dictionary<string, AnimationClip>();
+            var clipsToCombine = new List<AnimationClip>();
+            var clipPaths = new Dictionary<string, AnimationClip>();
 
             Animator[] animators = parentObject.GetComponentsInChildren<Animator>();
 
@@ -78,11 +104,11 @@ namespace VZOptizone
 
             if (clipsToCombine.Count == 0)
             {
-                Debug.LogWarning("No se encontraron clips de animaciÛn para combinar.");
+                Debug.LogWarning("No se encontraron clips de animaci√≥n para combinar.");
                 return;
             }
 
-            AnimationClip combinedClip = new AnimationClip();
+            var combinedClip = new AnimationClip();
 
             foreach (var kvp in clipPaths)
             {
@@ -95,7 +121,7 @@ namespace VZOptizone
                     string newPath = pathPrefix + "/" + binding.path;
                     AnimationCurve curve = AnimationUtility.GetEditorCurve(clip, binding);
 
-                    AnimationCurve adjustedCurve = new AnimationCurve();
+                    var adjustedCurve = new AnimationCurve();
                     foreach (Keyframe key in curve.keys)
                     {
                         adjustedCurve.AddKey(new Keyframe(key.time, key.value, key.inTangent, key.outTangent));
@@ -108,7 +134,7 @@ namespace VZOptizone
             AssetDatabase.CreateAsset(combinedClip, savePath);
             AssetDatabase.SaveAssets();
 
-            Debug.Log($"AnimaciÛn combinada guardada en: {savePath}");
+            Debug.Log($"Animaci√≥n combinada guardada en: {savePath}");
         }
 
         private static string GetRelativePath(Transform root, Transform target)
