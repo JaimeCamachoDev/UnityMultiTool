@@ -1,7 +1,6 @@
 using UnityEngine;
 using UnityEditor;
 using System.Collections.Generic;
-using Optizone;
 using VZ_Optizone;
 
 namespace VZOptizone
@@ -9,7 +8,7 @@ namespace VZOptizone
     public class VZOptizoneWindow : EditorWindow
     {
         private int currentSection = 0;
-        private string[] sections = { "INFO", "ANIMATION", "IMAGE", "SCENE" };
+        private string[] sections = { "INFO", "ANIMATION" };
         private Dictionary<string, List<string>> toolCategories = new Dictionary<string, List<string>>();
         private Vector2 scrollPosition;
         private bool toolActive = false;
@@ -25,18 +24,11 @@ namespace VZOptizone
         private void OnEnable()
         {
             // Inicializar herramientas para cada sección
-            toolCategories.Add("IMAGE", new List<string> { "Convert Asset to Image", 
-                "Split texture into channels", 
-                "Merge textures into one",
-                "Extract frames from video",
-                "Convert sprites to animation clip"});
             toolCategories.Add("ANIMATION", new List<string> { "Remove blendshapes",
                 "Animation terminator",
                 "Bake pose",
                 "Combine animations/ors into one",
                 "Transfer bone weight"});
-            toolCategories.Add("SCENE", new List<string> { "Lightmap checker",
-                "Renamer"});
         }
 
         private void OnGUI()
@@ -59,14 +51,8 @@ namespace VZOptizone
                         case "INFO":
                             DrawInfoSection();
                             break;
-                        case "IMAGE":
-                            DrawImageToolsMenu();
-                            break;
                         case "ANIMATION":
                             DrawAnimationToolsMenu();
-                            break;
-                        case "SCENE":
-                            DrawSceneToolsMenu();
                             break;
                         default:
                             GUILayout.Label("Selecciona una herramienta en el menú de la izquierda.");
@@ -136,22 +122,6 @@ namespace VZOptizone
                             new GUIStyle(GUI.skin.label) { wordWrap = true });
         }
 
-        private void DrawSceneToolsMenu()
-        {
-            GUILayout.Label("Tools for SCENE", EditorStyles.boldLabel);
-
-            if (toolCategories.ContainsKey("SCENE"))
-            {
-                foreach (var tool in toolCategories["SCENE"])
-                {
-                    GUILayout.Space(5);
-                    if (GUILayout.Button(tool))
-                    {
-                        OpenImageTool(tool);
-                    }
-                }
-            }
-        }
         private void DrawAnimationToolsMenu()
         {
             GUILayout.Label("Tools for ANIMATION", EditorStyles.boldLabel);
@@ -168,23 +138,6 @@ namespace VZOptizone
                 }
             }
         }
-        private void DrawImageToolsMenu()
-        {
-            GUILayout.Label("Tools for IMAGE", EditorStyles.boldLabel);
-
-            if (toolCategories.ContainsKey("IMAGE"))
-            {
-                foreach (var tool in toolCategories["IMAGE"])
-                {
-                    GUILayout.Space(5);
-                    if (GUILayout.Button(tool))
-                    {
-                        OpenImageTool(tool);
-                    }
-                }
-            }
-        }
-
         private void OpenImageTool(string toolName)
         {
             activeTool = toolName;
@@ -201,32 +154,11 @@ namespace VZOptizone
 
             switch (activeTool)
             {
-                case "Convert Asset to Image":
-                    AssetToImageConverterTool.DrawTool();
-                    break;
-                case "Split texture into channels":
-                    ImageChannelSplitterTool.DrawTool();
-                    break;
-                case "Merge textures into one":
-                    ImageChannelMergerTool.DrawTool();
-                    break;
-                case "Extract frames from video":
-                    VideoToFramesExtractorTool.DrawTool();
-                    break;
-                case "Convert sprites to animation clip":
-                    UIAnimationClipGeneratorTool.DrawTool();
-                    break;
                 case "Remove blendshapes":
                     BlendshapeRemovalTool.DrawTool();
                     break;
                 case "Animation terminator":
                     AnimationTerminatorTool.DrawTool();
-                    break;
-                case "Lightmap checker":
-                    LightmapCheckerTool.DrawTool();
-                    break;
-                case "Renamer":
-                    RenameTool.DrawTool();
                     break;
                 case "Bake pose":
                     BakeMeshTool.DrawTool();

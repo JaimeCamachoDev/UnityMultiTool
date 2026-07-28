@@ -1,58 +1,87 @@
-using UnityEngine;
-using UnityEditor;
+using System.Collections.Generic;
 using System.IO;
+using JaimeCamachoDev.Multitool.UI;
+using UnityEditor;
+using UnityEditor.UIElements;
+using UnityEngine;
+using UnityEngine.UIElements;
 
-namespace VZOptizone
+namespace JaimeCamachoDev.Multitool.Textures
 {
     public static class AssetToImageConverterTool
     {
+        private static readonly string[] formats = { "PNG", "JPG" };
+
         private static Texture2D selectedTexture;
         private static string outputName = "ConvertedImage";
-        private static string[] formats = { "PNG", "JPG" };
-        private static int selectedFormatIndex = 0;
-        private static bool deleteOriginalAsset = false; // Opción para eliminar el archivo original
-        private static bool convertBackToAsset = false;  // Opción para convertir de imagen a asset
+        private static int selectedFormatIndex;
+        private static bool deleteOriginalAsset;
 
-        public static void DrawTool()
+        public static VisualElement CreateGUI()
         {
-            GUILayout.Label("Convertir Asset a Imagen o Imagen a Asset", EditorStyles.boldLabel);
+            var root = new VisualElement();
+            root.Add(new Label("Convert Asset to Image") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginBottom = 6 } });
+            root.Add(new HelpBox(
+                "Convierte una textura del proyecto a un archivo de imagen (PNG/JPG) en disco, o crea un asset de Texture2D a partir de una imagen existente.",
+                HelpBoxMessageType.Info));
 
-            selectedTexture = (Texture2D)EditorGUILayout.ObjectField("Asset de Textura", selectedTexture, typeof(Texture2D), false);
+            var contentContainer = new VisualElement { style = { marginTop = 6 } };
+            root.Add(contentContainer);
 
-            if (selectedTexture == null)
+            void RefreshContent()
             {
-                GUILayout.Label("Por favor, selecciona una textura válida.", EditorStyles.helpBox);
-                return;
+                contentContainer.Clear();
+
+                var sourcePanel = new MTUIPanel("Origen");
+
+                var textureField = new ObjectField("Asset de textura") { objectType = typeof(Texture2D), allowSceneObjects = false, value = selectedTexture };
+                textureField.RegisterValueChangedCallback(evt =>
+                {
+                    selectedTexture = evt.newValue as Texture2D;
+                    RefreshContent();
+                });
+                sourcePanel.Add(textureField);
+                contentContainer.Add(sourcePanel);
+
+                if (selectedTexture == null)
+                {
+                    contentContainer.Add(new HelpBox("Selecciona una textura vÃ¡lida para continuar.", HelpBoxMessageType.Warning) { style = { marginTop = 10 } });
+                    return;
+                }
+
+                var exportPanel = new MTUIPanel("Exportar a imagen") { style = { marginTop = 10 } };
+
+                var formatField = new PopupField<string>("Formato de salida", new List<string>(formats), selectedFormatIndex);
+                formatField.RegisterValueChangedCallback(evt => selectedFormatIndex = formatField.index);
+                exportPanel.Add(formatField);
+
+                var nameField = new TextField("Nombre del archivo de salida") { value = outputName };
+                nameField.RegisterValueChangedCallback(evt => outputName = evt.newValue);
+                exportPanel.Add(nameField);
+
+                var deleteToggle = new Toggle("Eliminar asset original") { value = deleteOriginalAsset };
+                deleteToggle.RegisterValueChangedCallback(evt => deleteOriginalAsset = evt.newValue);
+                exportPanel.Add(deleteToggle);
+
+                var convertButton = new MTUIActionButton("Convertir y guardar", ConvertAndSaveImage);
+                convertButton.style.marginTop = 10;
+                convertButton.SetAvailable(!string.IsNullOrEmpty(outputName));
+                exportPanel.Add(convertButton);
+
+                contentContainer.Add(exportPanel);
+
+                var importPanel = new MTUIPanel("Convertir imagen a asset") { style = { marginTop = 10 } };
+                importPanel.Add(new MTUIInfoLabel("Crea un asset Texture2D a partir de la textura seleccionada arriba."));
+
+                var convertBackButton = new MTUIActionButton("Convertir imagen a asset", ConvertImageToAsset);
+                convertBackButton.style.marginTop = 6;
+                importPanel.Add(convertBackButton);
+
+                contentContainer.Add(importPanel);
             }
 
-            GUILayout.Space(10);
-
-            GUILayout.Label("Opciones de salida", EditorStyles.boldLabel);
-
-            // Selección del formato
-            selectedFormatIndex = EditorGUILayout.Popup("Formato de salida", selectedFormatIndex, formats);
-
-            // Campo de texto para el nombre del archivo de salida
-            outputName = EditorGUILayout.TextField("Nombre del archivo de salida", outputName);
-
-            // Opción para eliminar el asset original
-            deleteOriginalAsset = EditorGUILayout.Toggle("Eliminar Asset Original", deleteOriginalAsset);
-
-            GUILayout.Space(10);
-
-            // Botón para convertir
-            if (GUILayout.Button("Convertir y Guardar"))
-            {
-                ConvertAndSaveImage();
-            }
-
-            // Botón para convertir de imagen a .asset
-            convertBackToAsset = EditorGUILayout.Toggle("Convertir Imagen a Asset", convertBackToAsset);
-
-            if (convertBackToAsset && GUILayout.Button("Convertir Imagen a Asset"))
-            {
-                ConvertImageToAsset();
-            }
+            RefreshContent();
+            return root;
         }
 
         private static void ConvertAndSaveImage()
@@ -63,7 +92,6 @@ namespace VZOptizone
                 return;
             }
 
-            // Obtener la ruta del asset original
             string assetPath = AssetDatabase.GetAssetPath(selectedTexture);
             if (string.IsNullOrEmpty(assetPath))
             {
@@ -71,36 +99,23 @@ namespace VZOptizone
                 return;
             }
 
-            // Definir la ruta de salida en la misma carpeta que el asset
             string directory = Path.GetDirectoryName(assetPath);
             string outputPath = Path.Combine(directory, outputName);
 
-            // Agregar la extensión según el formato seleccionado
             string extension = formats[selectedFormatIndex] == "PNG" ? ".png" : ".jpg";
             outputPath += extension;
 
-            // Codificar y guardar la imagen
-            byte[] bytes;
-            if (formats[selectedFormatIndex] == "PNG")
-            {
-                bytes = selectedTexture.EncodeToPNG();
-            }
-            else
-            {
-                bytes = selectedTexture.EncodeToJPG();
-            }
+            byte[] bytes = formats[selectedFormatIndex] == "PNG" ? selectedTexture.EncodeToPNG() : selectedTexture.EncodeToJPG();
 
             File.WriteAllBytes(outputPath, bytes);
             Debug.Log($"La imagen ha sido guardada en {outputPath}");
 
-            // Eliminar el archivo original si está habilitada la opción
             if (deleteOriginalAsset)
             {
                 AssetDatabase.DeleteAsset(assetPath);
-                Debug.Log($"El archivo .asset original ha sido eliminado.");
+                Debug.Log("El archivo .asset original ha sido eliminado.");
             }
 
-            // Refrescar el AssetDatabase para que Unity reconozca el nuevo archivo
             AssetDatabase.Refresh();
         }
 
@@ -112,7 +127,6 @@ namespace VZOptizone
                 return;
             }
 
-            // Obtener la ruta de la imagen original
             string imagePath = AssetDatabase.GetAssetPath(selectedTexture);
             if (string.IsNullOrEmpty(imagePath))
             {
@@ -120,12 +134,11 @@ namespace VZOptizone
                 return;
             }
 
-            // Crear un nuevo archivo .asset a partir de la imagen
             string directory = Path.GetDirectoryName(imagePath);
             string assetName = Path.GetFileNameWithoutExtension(imagePath);
             string outputAssetPath = Path.Combine(directory, assetName + ".asset");
 
-            Texture2D newTexture = new Texture2D(selectedTexture.width, selectedTexture.height);
+            var newTexture = new Texture2D(selectedTexture.width, selectedTexture.height);
             EditorUtility.CopySerialized(selectedTexture, newTexture);
 
             AssetDatabase.CreateAsset(newTexture, outputAssetPath);

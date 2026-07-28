@@ -4,11 +4,13 @@ using System.Linq;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
-using Optizone;
 using VZ_Optizone;
 using VZOptizone;
 using JaimeCamachoDev.Multitool.Animation;
+using JaimeCamachoDev.Multitool.Lighting;
+using JaimeCamachoDev.Multitool.Misc;
 using JaimeCamachoDev.Multitool.Modeling;
+using JaimeCamachoDev.Multitool.Textures;
 using JaimeCamachoDev.Multitool.UI;
 
 namespace JaimeCamachoDev.Multitool
@@ -172,8 +174,8 @@ namespace JaimeCamachoDev.Multitool
             toolDescriptions["Convert Asset to Image"] = "Convierte assets de texturas en imágenes y viceversa.";
             toolDescriptions["Split texture into channels"] = "Extrae canales RGBA independientes utilizando ffmpeg.";
             toolDescriptions["Merge textures into one"] = "Combina cuatro texturas en un solo mapa RGBA.";
-            toolDescriptions["Extract frames from video"] = "Exporta fotogramas individuales a partir de un vdeo.";
-            toolDescriptions["Convert sprites to animation clip"] = "Genera clips de animacin a partir de sprites 2D.";
+            toolDescriptions["Extract frames from video"] = "Exporta fotogramas individuales a partir de un vídeo.";
+            toolDescriptions["Convert sprites to animation clip"] = "Genera clips de animación a partir de sprites 2D.";
 
             toolDescriptions["Generate mesh uv lightmaps"] = "Crea coordenadas UV2 automticas listas para bake de luz.";
             toolDescriptions["Move UV inside grid"] = "Ajusta UVs para mantenerlos dentro del tile principal.";
@@ -190,11 +192,11 @@ namespace JaimeCamachoDev.Multitool
             toolActivations.Clear();
             toolDeactivations.Clear();
 
-            toolDrawers["Convert Asset to Image"] = AssetToImageConverterTool.DrawTool;
-            toolDrawers["Split texture into channels"] = ImageChannelSplitterTool.DrawTool;
-            toolDrawers["Merge textures into one"] = ImageChannelMergerTool.DrawTool;
-            toolDrawers["Extract frames from video"] = VideoToFramesExtractorTool.DrawTool;
-            toolDrawers["Convert sprites to animation clip"] = UIAnimationClipGeneratorTool.DrawTool;
+            toolBuilders["Convert Asset to Image"] = AssetToImageConverterTool.CreateGUI;
+            toolBuilders["Split texture into channels"] = ImageChannelSplitterTool.CreateGUI;
+            toolBuilders["Merge textures into one"] = ImageChannelMergerTool.CreateGUI;
+            toolBuilders["Extract frames from video"] = VideoToFramesExtractorTool.CreateGUI;
+            toolBuilders["Convert sprites to animation clip"] = UIAnimationClipGeneratorTool.CreateGUI;
 
             toolDrawers["Remove blendshapes"] = BlendshapeRemovalTool.DrawTool;
             toolDrawers["Animation terminator"] = AnimationTerminatorTool.DrawTool;
@@ -207,8 +209,8 @@ namespace JaimeCamachoDev.Multitool
             toolBuilders["VAT Painter"] = VATPainterTool.CreateGUI;
             toolBuilders["VAT Combiner"] = VATCombinerTool.CreateGUI;
 
-            toolDrawers["Lightmap checker"] = LightmapCheckerTool.DrawTool;
-            toolDrawers["Renamer"] = RenameTool.DrawTool;
+            toolBuilders["Lightmap checker"] = LightmapCheckerTool.CreateGUI;
+            toolBuilders["Renamer"] = RenameTool.CreateGUI;
             toolBuilders["Hollow shell"] = HollowShellMeshTool.CreateGUI;
             toolBuilders["Multi material Finder"] = MultiMaterialFinderTool.CreateGUI;
             toolBuilders["Multi material splitter"] = MultimaterialMeshSplitterTool.CreateGUI;
