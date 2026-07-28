@@ -74,7 +74,7 @@ namespace JaimeCamachoDev.Multitool.Modeling
         private static void FindObjectsWithMultipleMaterials()
         {
             objectsWithMultiMaterial.Clear();
-            Renderer[] renderers = Object.FindObjectsByType<Renderer>();
+            Renderer[] renderers = Object.FindObjectsByType<Renderer>(FindObjectsSortMode.None);
 
             foreach (Renderer renderer in renderers)
             {
