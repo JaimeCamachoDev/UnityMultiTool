@@ -115,9 +115,7 @@ namespace JaimeCamachoDev.Multitool
                 "Transfer bone weight",
                 "Alembic to VAT",
                 "VAT Baker",
-                "VAT UV Visual",
-                "VAT Painter",
-                "VAT Combiner"
+                "Recalculate Mesh Bounds"
             };
 
             categoryTools[Category.Texturas] = new List<string>
@@ -133,8 +131,7 @@ namespace JaimeCamachoDev.Multitool
             {
                 "Generate mesh uv lightmaps",
                 "Move UV inside grid",
-                "Lightmap checker",
-                "Recalculate Mesh Bounds"
+                "Lightmap checker"
             };
 
             categoryTools[Category.Miscelanea] = new List<string>
@@ -179,7 +176,7 @@ namespace JaimeCamachoDev.Multitool
             toolDescriptions["Generate mesh uv lightmaps"] = "Crea coordenadas UV2 automáticas listas para bake de luz.";
             toolDescriptions["Move UV inside grid"] = "Ajusta UVs para mantenerlos dentro del tile principal.";
             toolDescriptions["Lightmap checker"] = "Inspecciona y visualiza lightmaps en la escena actual.";
-            toolDescriptions["Recalculate Mesh Bounds"] = "Ajusta los bounds de tus meshes para mejorar el culling.";
+            toolDescriptions["Recalculate Mesh Bounds"] = "Ajusta los bounds de tus meshes, estáticas o skinned, para mejorar el culling.";
 
             toolDescriptions["Renamer"] = "Renombra objetos y assets en bloque con reglas flexibles.";
             toolDescriptions["Crear Estructura de Escena"] = "Crea una jerarquía de organización estándar para la escena actual.";

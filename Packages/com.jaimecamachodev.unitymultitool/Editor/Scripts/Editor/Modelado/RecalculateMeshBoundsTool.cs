@@ -9,13 +9,14 @@ namespace JaimeCamachoDev.Multitool.Modeling
     public static class RecalculateMeshBoundsTool
     {
         private static MeshFilter targetMeshFilter;
+        private static SkinnedMeshRenderer targetSkinnedMeshRenderer;
         private static Bounds editableBounds;
 
         public static VisualElement CreateGUI()
         {
             var root = new VisualElement();
             root.Add(new Label("Mesh Bounds Adjuster") { style = { unityFontStyleAndWeight = FontStyle.Bold, marginBottom = 6 } });
-            root.Add(new HelpBox("Selecciona en la escena un objeto con MeshFilter para ajustar los bounds de su Mesh.", HelpBoxMessageType.Info));
+            root.Add(new HelpBox("Selecciona en la escena un objeto con MeshFilter o SkinnedMeshRenderer para ajustar los bounds de su Mesh.", HelpBoxMessageType.Info));
 
             var contentContainer = new VisualElement { style = { marginTop = 6 } };
             root.Add(contentContainer);
@@ -26,21 +27,24 @@ namespace JaimeCamachoDev.Multitool.Modeling
 
                 GameObject active = Selection.activeGameObject;
                 MeshFilter meshFilter = active != null ? active.GetComponent<MeshFilter>() : null;
+                SkinnedMeshRenderer skinnedMeshRenderer = meshFilter == null && active != null ? active.GetComponent<SkinnedMeshRenderer>() : null;
 
-                if (meshFilter != targetMeshFilter)
+                if (meshFilter != targetMeshFilter || skinnedMeshRenderer != targetSkinnedMeshRenderer)
                 {
-                    SetTarget(meshFilter);
+                    SetTarget(meshFilter, skinnedMeshRenderer);
                 }
 
-                if (meshFilter == null)
+                if (meshFilter == null && skinnedMeshRenderer == null)
                 {
-                    contentContainer.Add(new HelpBox("Selecciona un objeto con MeshFilter en la escena para continuar.", HelpBoxMessageType.Warning));
+                    contentContainer.Add(new HelpBox("Selecciona un objeto con MeshFilter o SkinnedMeshRenderer en la escena para continuar.", HelpBoxMessageType.Warning));
                     return;
                 }
 
-                if (meshFilter.sharedMesh == null)
+                Mesh sharedMesh = meshFilter != null ? meshFilter.sharedMesh : skinnedMeshRenderer.sharedMesh;
+                if (sharedMesh == null)
                 {
-                    contentContainer.Add(new HelpBox($"El MeshFilter de '{active.name}' no tiene ninguna Mesh asignada.", HelpBoxMessageType.Warning));
+                    string componentName = meshFilter != null ? "MeshFilter" : "SkinnedMeshRenderer";
+                    contentContainer.Add(new HelpBox($"El {componentName} de '{active.name}' no tiene ninguna Mesh asignada.", HelpBoxMessageType.Warning));
                     return;
                 }
 
@@ -81,7 +85,17 @@ namespace JaimeCamachoDev.Multitool.Modeling
 
         private static void ApplyBounds()
         {
-            if (targetMeshFilter != null && targetMeshFilter.sharedMesh != null)
+            if (targetSkinnedMeshRenderer != null)
+            {
+                // Los bounds de un SkinnedMeshRenderer son propios de esa instancia en la
+                // escena (dependen de la pose/skeleton), no del asset de Mesh compartido.
+                Undo.RecordObject(targetSkinnedMeshRenderer, "Adjust Skinned Mesh Bounds");
+                targetSkinnedMeshRenderer.localBounds = editableBounds;
+                EditorUtility.SetDirty(targetSkinnedMeshRenderer);
+
+                Debug.Log("Bounds updated! New size: " + targetSkinnedMeshRenderer.localBounds.size);
+            }
+            else if (targetMeshFilter != null && targetMeshFilter.sharedMesh != null)
             {
                 Mesh mesh = targetMeshFilter.sharedMesh;
 
@@ -101,17 +115,28 @@ namespace JaimeCamachoDev.Multitool.Modeling
 
         private static void ResetBounds()
         {
-            if (targetMeshFilter != null && targetMeshFilter.sharedMesh != null)
+            if (targetSkinnedMeshRenderer != null)
+            {
+                editableBounds = targetSkinnedMeshRenderer.localBounds;
+                Debug.Log("Bounds reset to original mesh bounds.");
+            }
+            else if (targetMeshFilter != null && targetMeshFilter.sharedMesh != null)
             {
                 editableBounds = targetMeshFilter.sharedMesh.bounds;
                 Debug.Log("Bounds reset to original mesh bounds.");
             }
         }
 
-        public static void SetTarget(MeshFilter meshFilter)
+        public static void SetTarget(MeshFilter meshFilter, SkinnedMeshRenderer skinnedMeshRenderer = null)
         {
             targetMeshFilter = meshFilter;
-            if (targetMeshFilter != null && targetMeshFilter.sharedMesh != null)
+            targetSkinnedMeshRenderer = skinnedMeshRenderer;
+
+            if (targetSkinnedMeshRenderer != null)
+            {
+                editableBounds = targetSkinnedMeshRenderer.localBounds;
+            }
+            else if (targetMeshFilter != null && targetMeshFilter.sharedMesh != null)
             {
                 editableBounds = targetMeshFilter.sharedMesh.bounds;
             }
@@ -120,7 +145,13 @@ namespace JaimeCamachoDev.Multitool.Modeling
         // Dibuja el Bound en la SceneView
         public static void OnSceneGUI(SceneView sceneView)
         {
-            if (targetMeshFilter != null && targetMeshFilter.sharedMesh != null)
+            if (targetSkinnedMeshRenderer != null)
+            {
+                Handles.color = Color.yellow;
+                Handles.DrawWireCube(targetSkinnedMeshRenderer.transform.TransformPoint(editableBounds.center),
+                                     targetSkinnedMeshRenderer.transform.TransformVector(editableBounds.size));
+            }
+            else if (targetMeshFilter != null && targetMeshFilter.sharedMesh != null)
             {
                 Handles.color = Color.yellow;
                 Handles.DrawWireCube(targetMeshFilter.transform.TransformPoint(editableBounds.center),
