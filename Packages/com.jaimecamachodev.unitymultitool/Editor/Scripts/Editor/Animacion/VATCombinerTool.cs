@@ -357,7 +357,7 @@ namespace JaimeCamachoDev.Multitool.Animation
                 CopyMatchingTextureProperties(sourceMaterial, vatMaterial);
                 CopyMatchingFloatProperties(sourceMaterial, vatMaterial);
                 if (vatMaterial.HasProperty("_NumberOfMeshes")) vatMaterial.SetFloat("_NumberOfMeshes", instances.Count);
-                if (vatMaterial.HasProperty("_TotalVertex")) vatMaterial.SetFloat("_TotalVertex", vertexCount);
+                if (vatMaterial.HasProperty("_TotalVertex")) vatMaterial.SetFloat("_TotalVertex", vertexCount * instances.Count);
 
                 string meshPath = AssetDatabase.GenerateUniqueAssetPath(Path.Combine(outputPath, combinedMesh.name + ".asset").Replace("\\", "/"));
                 AssetDatabase.CreateAsset(combinedMesh, meshPath);
