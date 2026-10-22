@@ -25,5 +25,9 @@
   "repository": {
     "url": "https://github.com/JaimeCamachoDev/UnityMultiTool.git",
     "type": "git"
+  },
+  "dependencies": {
+    "com.unity.editorcoroutines": "1.0.1",
+    "com.unity.formats.alembic": "2.4.4"
   }
 }
