@@ -1,31 +1,32 @@
 {
   "name": "com.jaimecamachodev.unitymultitool",
-  "version": "1.0.0",
+  "version": "1.3.0",
   "displayName": "UnityMultiTool",
-  "description": "Multi Herramienta",
+  "description": "Colección de herramientas de editor para Unity: animación, VAT desde Alembic, mallas y utilidades de producción.",
   "unity": "6000.0",
   "unityRelease": "0f1",
   "license": "MIT",
-  "documentationUrl": "https://github.com/JaimeCamachoDev/UnityMultiTool",
-  "changelogUrl": "https://github.com/JaimeCamachoDev/UnityMultiTool/releases",
-  "licensesUrl": "https://github.com/JaimeCamachoDev/UnityMultiTool/blob/main/LICENSE",
-  "keywords": [
-    "unity",
-    "multitool",
-    "editor",
-    "vat",
-    "animation",
-    "mesh"
-  ],
   "author": {
     "name": "JaimeCamachoDev",
     "url": "https://github.com/JaimeCamachoDev",
     "email": "jaime.camacho.dev@gmail.com"
   },
   "repository": {
-    "url": "https://github.com/JaimeCamachoDev/UnityMultiTool.git",
-    "type": "git"
+    "type": "git",
+    "url": "git+https://github.com/JaimeCamachoDev/UnityMultiTool.git"
   },
+  "documentationUrl": "https://github.com/JaimeCamachoDev/UnityMultiTool#readme",
+  "changelogUrl": "https://github.com/JaimeCamachoDev/UnityMultiTool/blob/main/Packages/com.jaimecamachodev.unitymultitool/CHANGELOG.md",
+  "licensesUrl": "https://github.com/JaimeCamachoDev/UnityMultiTool/blob/main/LICENSE",
+  "keywords": [
+    "unity",
+    "editor",
+    "multitool",
+    "vat",
+    "alembic",
+    "animation",
+    "mesh"
+  ],
   "dependencies": {
     "com.unity.editorcoroutines": "1.0.1",
     "com.unity.formats.alembic": "2.4.4"
