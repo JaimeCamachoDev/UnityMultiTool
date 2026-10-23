@@ -1,15 +1,15 @@
 {
   "dependencies": {
-    "com.jaimecamachodev.unityfolders": "2.1.0",
+    "com.jaimecamachodev.unityfolders": "2.2.0",
     "com.unity.2d.animation": "14.0.4",
     "com.unity.editorcoroutines": "1.1.0",
     "com.unity.feature.characters-animation": "1.0.0",
     "com.unity.formats.alembic": "2.4.4",
     "com.unity.ide.visualstudio": "2.0.27",
-    "com.unity.render-pipelines.universal": "17.4.0",
     "com.unity.modules.adaptiveperformance": "1.0.0",
     "com.unity.modules.animation": "1.0.0",
-    "com.unity.modules.vectorgraphics": "1.0.0"
+    "com.unity.modules.vectorgraphics": "1.0.0",
+    "com.unity.render-pipelines.universal": "17.4.0"
   },
   "scopedRegistries": [
     {
@@ -23,7 +23,8 @@
       "name": "JaimeCamachoDevS",
       "url": "https://registry.npmjs.org",
       "scopes": [
-        "com.jaimecamacho"
+        "com.jaimecamacho",
+        "com.jaimecamachodev"
       ]
     },
     {
