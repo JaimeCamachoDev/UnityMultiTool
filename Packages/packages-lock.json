@@ -7,6 +7,22 @@
       "dependencies": {},
       "url": "https://packages.unity.com"
     },
+    "com.jaimecamachodev.unityfolders": {
+      "version": "2.2.0",
+      "depth": 0,
+      "source": "registry",
+      "dependencies": {},
+      "url": "https://registry.npmjs.org"
+    },
+    "com.jaimecamachodev.unitymultitool": {
+      "version": "file:com.jaimecamachodev.unitymultitool",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.unity.editorcoroutines": "1.0.1",
+        "com.unity.formats.alembic": "2.4.4"
+      }
+    },
     "com.unity.2d.animation": {
       "version": "14.0.4",
       "depth": 0,

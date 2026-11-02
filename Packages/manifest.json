@@ -26,13 +26,6 @@
         "com.jaimecamacho",
         "com.jaimecamachodev"
       ]
-    },
-    {
-      "name": "JaimeCamachoDev",
-      "url": "https://registry.npmjs.org",
-      "scopes": [
-        "com.jaimecamachodev"
-      ]
     }
   ]
 }
