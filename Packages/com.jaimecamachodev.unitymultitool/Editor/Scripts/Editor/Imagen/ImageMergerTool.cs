@@ -104,6 +104,10 @@ namespace JaimeCamachoDev.Multitool.Textures
             string outputPath = Path.Combine(outputFolderPath, $"{outputImageName}.png");
 
             string ffmpegPath = FfmpegLocator.ExecutablePath;
+            if (ffmpegPath == null)
+            {
+                return;
+            }
 
             string command = $"-i \"{greenImagePath}\" -i \"{blueImagePath}\" -i \"{redImagePath}\" -i \"{alphaImagePath}\" -filter_complex " +
                              "\"[0:v][1:v][2:v]mergeplanes=0x001020:format=gbrp10le[vrgb];[vrgb][3:v]alphamerge\" -c:v png \"" + outputPath + "\"";

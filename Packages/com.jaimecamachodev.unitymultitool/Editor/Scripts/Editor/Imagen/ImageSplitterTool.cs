@@ -122,6 +122,11 @@ namespace JaimeCamachoDev.Multitool.Textures
                 return;
             }
 
+            if (FfmpegLocator.ExecutablePath == null)
+            {
+                return;
+            }
+
             string directory = Path.GetDirectoryName(assetPath);
             string extension = formats[selectedFormatIndex] == "PNG" ? ".png" : ".jpg";
 
@@ -147,7 +152,11 @@ namespace JaimeCamachoDev.Multitool.Textures
 
         private static void ExecuteFFmpegCommand(string inputFilePath, string outputFilePath, string channel)
         {
-            string ffmpegPath = FfmpegLocator.ExecutablePath;
+            string ffmpegPath = FfmpegLocator.Find();
+            if (ffmpegPath == null)
+            {
+                return;
+            }
             string command = $"-i \"{inputFilePath}\" -filter_complex \"[0:v]extractplanes={channel}[{channel}]\" -map \"[{channel}]\" \"{outputFilePath}\"";
 
             var startInfo = new ProcessStartInfo

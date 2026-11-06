@@ -110,6 +110,11 @@ namespace JaimeCamachoDev.Multitool.Textures
                 return;
             }
 
+            if (FfmpegLocator.ExecutablePath == null)
+            {
+                return;
+            }
+
             string outputPath = AssetDatabase.GetAssetPath(outputFolder);
 
             string framesFolder = Path.Combine(outputPath, "Frames");
@@ -131,7 +136,11 @@ namespace JaimeCamachoDev.Multitool.Textures
 
         private static void RunFFmpegCommand(string args)
         {
-            string ffmpegPath = FfmpegLocator.ExecutablePath;
+            string ffmpegPath = FfmpegLocator.Find();
+            if (ffmpegPath == null)
+            {
+                return;
+            }
 
             var processInfo = new ProcessStartInfo(ffmpegPath, args)
             {
