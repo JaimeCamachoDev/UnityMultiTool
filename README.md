@@ -6,6 +6,10 @@ _**Herramienta con diversos usos para unity**_
 
 </header>
 
+## Preview
+
+![Hub de Multitool (Tools → JaimeCamachoDev → Multitool → Open Hub)](https://raw.githubusercontent.com/JaimeCamachoDev/UnityMultiTool/main/.github/preview.png)
+
 ## 📦 Instalación (UnityMultiTool vía Package Manager)
 
 Esta tool se distribuye como paquete de Unity Package Manager con el id `com.jaimecamachodev.unitymultitool`, publicado en npm.
